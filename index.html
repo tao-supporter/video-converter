@@ -241,7 +241,7 @@
       <div class="notes">
         <h2>使う前に</h2>
         <ul>
-          <li>初回のみ、変換エンジン(FFmpeg、約31MB)を読み込みます。2回目以降は速く始まります。</li>
+          <li>変換エンジン(FFmpeg、約31MB)はこのページに同梱されています。初回の読み込みには少し時間がかかりますが、進捗が表示されます。同梱ファイルが読めない場合は、予備の配信元(jsdelivr / unpkg)から自動で読み込みます。</li>
           <li>コピーで済む素材は一瞬で終わります。MPEG-2 の変換が必要な素材は、ブラウザ内処理のためネイティブアプリより時間がかかります(目安として、数分の動画で数分程度かかることがあります)。</li>
           <li class="warn-line">iPhone / iPad の Safari にはメモリ上限(約2GB)があり、大きなファイルは変換に失敗することがあります。失敗する場合は短いファイルで試すか、PCでの変換をおすすめします。</li>
           <li>変換中はこのタブを開いたままにしてください。</li>
@@ -249,14 +249,26 @@
       </div>
     </main>
 
-    <script src="https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.15/dist/umd/ffmpeg.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@ffmpeg/util@0.12.2/dist/umd/index.js"></script>
+    <script src="data:application/javascript;base64,IWZ1bmN0aW9uKGUsdCl7Im9iamVjdCI9PXR5cGVvZiBleHBvcnRzJiYib2JqZWN0Ij09dHlwZW9mIG1vZHVsZT9tb2R1bGUuZXhwb3J0cz10KCk6ImZ1bmN0aW9uIj09dHlwZW9mIGRlZmluZSYmZGVmaW5lLmFtZD9kZWZpbmUoW10sdCk6Im9iamVjdCI9PXR5cGVvZiBleHBvcnRzP2V4cG9ydHMuRkZtcGVnV0FTTT10KCk6ZS5GRm1wZWdXQVNNPXQoKX0oc2VsZiwoKCk9PigoKT0+eyJ1c2Ugc3RyaWN0Ijt2YXIgZT17bTp7fSxkOih0LHMpPT57Zm9yKHZhciByIGluIHMpZS5vKHMscikmJiFlLm8odCxyKSYmT2JqZWN0LmRlZmluZVByb3BlcnR5KHQscix7ZW51bWVyYWJsZTohMCxnZXQ6c1tyXX0pfSx1OmU9PmUrIi5mZm1wZWcuanMifTtlLmc9ZnVuY3Rpb24oKXtpZigib2JqZWN0Ij09dHlwZW9mIGdsb2JhbFRoaXMpcmV0dXJuIGdsb2JhbFRoaXM7dHJ5e3JldHVybiB0aGlzfHxuZXcgRnVuY3Rpb24oInJldHVybiB0aGlzIikoKX1jYXRjaChlKXtpZigib2JqZWN0Ij09dHlwZW9mIHdpbmRvdylyZXR1cm4gd2luZG93fX0oKSxlLm89KGUsdCk9Pk9iamVjdC5wcm90b3R5cGUuaGFzT3duUHJvcGVydHkuY2FsbChlLHQpLGUucj1lPT57InVuZGVmaW5lZCIhPXR5cGVvZiBTeW1ib2wmJlN5bWJvbC50b1N0cmluZ1RhZyYmT2JqZWN0LmRlZmluZVByb3BlcnR5KGUsU3ltYm9sLnRvU3RyaW5nVGFnLHt2YWx1ZToiTW9kdWxlIn0pLE9iamVjdC5kZWZpbmVQcm9wZXJ0eShlLCJfX2VzTW9kdWxlIix7dmFsdWU6ITB9KX0sKCgpPT57dmFyIHQ7ZS5nLmltcG9ydFNjcmlwdHMmJih0PWUuZy5sb2NhdGlvbisiIik7dmFyIHM9ZS5nLmRvY3VtZW50O2lmKCF0JiZzJiYocy5jdXJyZW50U2NyaXB0JiYodD1zLmN1cnJlbnRTY3JpcHQuc3JjKSwhdCkpe3ZhciByPXMuZ2V0RWxlbWVudHNCeVRhZ05hbWUoInNjcmlwdCIpO2lmKHIubGVuZ3RoKWZvcih2YXIgYT1yLmxlbmd0aC0xO2E+LTEmJiF0Oyl0PXJbYS0tXS5zcmN9aWYoIXQpdGhyb3cgbmV3IEVycm9yKCJBdXRvbWF0aWMgcHVibGljUGF0aCBpcyBub3Qgc3VwcG9ydGVkIGluIHRoaXMgYnJvd3NlciIpO3Q9dC5yZXBsYWNlKC8jLiokLywiIikucmVwbGFjZSgvXD8uKiQvLCIiKS5yZXBsYWNlKC9cL1teXC9dKyQvLCIvIiksZS5wPXR9KSgpLGUuYj1kb2N1bWVudC5iYXNlVVJJfHxzZWxmLmxvY2F0aW9uLmhyZWY7dmFyIHQscz17fTtlLnIocyksZS5kKHMse0ZGRlNUeXBlOigpPT5uLEZGbXBlZzooKT0+aX0pLGZ1bmN0aW9uKGUpe2UuTE9BRD0iTE9BRCIsZS5FWEVDPSJFWEVDIixlLkZGUFJPQkU9IkZGUFJPQkUiLGUuV1JJVEVfRklMRT0iV1JJVEVfRklMRSIsZS5SRUFEX0ZJTEU9IlJFQURfRklMRSIsZS5ERUxFVEVfRklMRT0iREVMRVRFX0ZJTEUiLGUuUkVOQU1FPSJSRU5BTUUiLGUuQ1JFQVRFX0RJUj0iQ1JFQVRFX0RJUiIsZS5MSVNUX0RJUj0iTElTVF9ESVIiLGUuREVMRVRFX0RJUj0iREVMRVRFX0RJUiIsZS5FUlJPUj0iRVJST1IiLGUuRE9XTkxPQUQ9IkRPV05MT0FEIixlLlBST0dSRVNTPSJQUk9HUkVTUyIsZS5MT0c9IkxPRyIsZS5NT1VOVD0iTU9VTlQiLGUuVU5NT1VOVD0iVU5NT1VOVCJ9KHR8fCh0PXt9KSk7Y29uc3Qgcj0oKCk9PntsZXQgZT0wO3JldHVybigpPT5lKyt9KSgpLGE9KG5ldyBFcnJvcigidW5rbm93biBtZXNzYWdlIHR5cGUiKSxuZXcgRXJyb3IoImZmbXBlZyBpcyBub3QgbG9hZGVkLCBjYWxsIGBhd2FpdCBmZm1wZWcubG9hZCgpYCBmaXJzdCIpKSxvPW5ldyBFcnJvcigiY2FsbGVkIEZGbXBlZy50ZXJtaW5hdGUoKSIpO25ldyBFcnJvcigiZmFpbGVkIHRvIGltcG9ydCBmZm1wZWctY29yZS5qcyIpO2NsYXNzIGl7I2U9bnVsbDsjdD17fTsjcz17fTsjcj1bXTsjYT1bXTtsb2FkZWQ9ITE7I289KCk9Pnt0aGlzLiNlJiYodGhpcy4jZS5vbm1lc3NhZ2U9KHtkYXRhOntpZDplLHR5cGU6cyxkYXRhOnJ9fSk9Pntzd2l0Y2gocyl7Y2FzZSB0LkxPQUQ6dGhpcy5sb2FkZWQ9ITAsdGhpcy4jdFtlXShyKTticmVhaztjYXNlIHQuTU9VTlQ6Y2FzZSB0LlVOTU9VTlQ6Y2FzZSB0LkVYRUM6Y2FzZSB0LkZGUFJPQkU6Y2FzZSB0LldSSVRFX0ZJTEU6Y2FzZSB0LlJFQURfRklMRTpjYXNlIHQuREVMRVRFX0ZJTEU6Y2FzZSB0LlJFTkFNRTpjYXNlIHQuQ1JFQVRFX0RJUjpjYXNlIHQuTElTVF9ESVI6Y2FzZSB0LkRFTEVURV9ESVI6dGhpcy4jdFtlXShyKTticmVhaztjYXNlIHQuTE9HOnRoaXMuI3IuZm9yRWFjaCgoZT0+ZShyKSkpO2JyZWFrO2Nhc2UgdC5QUk9HUkVTUzp0aGlzLiNhLmZvckVhY2goKGU9PmUocikpKTticmVhaztjYXNlIHQuRVJST1I6dGhpcy4jc1tlXShyKX1kZWxldGUgdGhpcy4jdFtlXSxkZWxldGUgdGhpcy4jc1tlXX0pfTsjaT0oe3R5cGU6ZSxkYXRhOnR9LHM9W10sbyk9PnRoaXMuI2U/bmV3IFByb21pc2UoKChhLGkpPT57Y29uc3Qgbj1yKCk7dGhpcy4jZSYmdGhpcy4jZS5wb3N0TWVzc2FnZSh7aWQ6bix0eXBlOmUsZGF0YTp0fSxzKSx0aGlzLiN0W25dPWEsdGhpcy4jc1tuXT1pLG8/LmFkZEV2ZW50TGlzdGVuZXIoImFib3J0IiwoKCk9PntpKG5ldyBET01FeGNlcHRpb24oYE1lc3NhZ2UgIyAke259IHdhcyBhYm9ydGVkYCwiQWJvcnRFcnJvciIpKX0pLHtvbmNlOiEwfSl9KSk6UHJvbWlzZS5yZWplY3QoYSk7b24oZSx0KXsibG9nIj09PWU/dGhpcy4jci5wdXNoKHQpOiJwcm9ncmVzcyI9PT1lJiZ0aGlzLiNhLnB1c2godCl9b2ZmKGUsdCl7ImxvZyI9PT1lP3RoaXMuI3I9dGhpcy4jci5maWx0ZXIoKGU9PmUhPT10KSk6InByb2dyZXNzIj09PWUmJih0aGlzLiNhPXRoaXMuI2EuZmlsdGVyKChlPT5lIT09dCkpKX1sb2FkPSh7Y2xhc3NXb3JrZXJVUkw6cywuLi5yfT17fSx7c2lnbmFsOmF9PXt9KT0+KHRoaXMuI2V8fCh0aGlzLiNlPXM/bmV3IFdvcmtlcihuZXcgVVJMKHMsImZpbGU6Ly8vVXNlcnMvZm9jdXMvUHJvamVjdHMvZmZtcGVnLndhc20vcGFja2FnZXMvZmZtcGVnL2Rpc3QvZXNtL2NsYXNzZXMuanMiKSx7dHlwZToibW9kdWxlIn0pOm5ldyBXb3JrZXIobmV3IFVSTChlLnArZS51KDgxNCksZS5iKSx7dHlwZTp2b2lkIDB9KSx0aGlzLiNvKCkpLHRoaXMuI2koe3R5cGU6dC5MT0FELGRhdGE6cn0sdm9pZCAwLGEpKTtleGVjPShlLHM9LTEse3NpZ25hbDpyfT17fSk9PnRoaXMuI2koe3R5cGU6dC5FWEVDLGRhdGE6e2FyZ3M6ZSx0aW1lb3V0OnN9fSx2b2lkIDAscik7ZmZwcm9iZT0oZSxzPS0xLHtzaWduYWw6cn09e30pPT50aGlzLiNpKHt0eXBlOnQuRkZQUk9CRSxkYXRhOnthcmdzOmUsdGltZW91dDpzfX0sdm9pZCAwLHIpO3Rlcm1pbmF0ZT0oKT0+e2NvbnN0IGU9T2JqZWN0LmtleXModGhpcy4jcyk7Zm9yKGNvbnN0IHQgb2YgZSl0aGlzLiNzW3RdKG8pLGRlbGV0ZSB0aGlzLiNzW3RdLGRlbGV0ZSB0aGlzLiN0W3RdO3RoaXMuI2UmJih0aGlzLiNlLnRlcm1pbmF0ZSgpLHRoaXMuI2U9bnVsbCx0aGlzLmxvYWRlZD0hMSl9O3dyaXRlRmlsZT0oZSxzLHtzaWduYWw6cn09e30pPT57Y29uc3QgYT1bXTtyZXR1cm4gcyBpbnN0YW5jZW9mIFVpbnQ4QXJyYXkmJmEucHVzaChzLmJ1ZmZlciksdGhpcy4jaSh7dHlwZTp0LldSSVRFX0ZJTEUsZGF0YTp7cGF0aDplLGRhdGE6c319LGEscil9O21vdW50PShlLHMscik9PnRoaXMuI2koe3R5cGU6dC5NT1VOVCxkYXRhOntmc1R5cGU6ZSxvcHRpb25zOnMsbW91bnRQb2ludDpyfX0sW10pO3VubW91bnQ9ZT0+dGhpcy4jaSh7dHlwZTp0LlVOTU9VTlQsZGF0YTp7bW91bnRQb2ludDplfX0sW10pO3JlYWRGaWxlPShlLHM9ImJpbmFyeSIse3NpZ25hbDpyfT17fSk9PnRoaXMuI2koe3R5cGU6dC5SRUFEX0ZJTEUsZGF0YTp7cGF0aDplLGVuY29kaW5nOnN9fSx2b2lkIDAscik7ZGVsZXRlRmlsZT0oZSx7c2lnbmFsOnN9PXt9KT0+dGhpcy4jaSh7dHlwZTp0LkRFTEVURV9GSUxFLGRhdGE6e3BhdGg6ZX19LHZvaWQgMCxzKTtyZW5hbWU9KGUscyx7c2lnbmFsOnJ9PXt9KT0+dGhpcy4jaSh7dHlwZTp0LlJFTkFNRSxkYXRhOntvbGRQYXRoOmUsbmV3UGF0aDpzfX0sdm9pZCAwLHIpO2NyZWF0ZURpcj0oZSx7c2lnbmFsOnN9PXt9KT0+dGhpcy4jaSh7dHlwZTp0LkNSRUFURV9ESVIsZGF0YTp7cGF0aDplfX0sdm9pZCAwLHMpO2xpc3REaXI9KGUse3NpZ25hbDpzfT17fSk9PnRoaXMuI2koe3R5cGU6dC5MSVNUX0RJUixkYXRhOntwYXRoOmV9fSx2b2lkIDAscyk7ZGVsZXRlRGlyPShlLHtzaWduYWw6c309e30pPT50aGlzLiNpKHt0eXBlOnQuREVMRVRFX0RJUixkYXRhOntwYXRoOmV9fSx2b2lkIDAscyl9dmFyIG47cmV0dXJuIGZ1bmN0aW9uKGUpe2UuTUVNRlM9Ik1FTUZTIixlLk5PREVGUz0iTk9ERUZTIixlLk5PREVSQVdGUz0iTk9ERVJBV0ZTIixlLklEQkZTPSJJREJGUyIsZS5XT1JLRVJGUz0iV09SS0VSRlMiLGUuUFJPWFlGUz0iUFJPWFlGUyJ9KG58fChuPXt9KSksc30pKCkpKTsKLy8jIHNvdXJjZU1hcHBpbmdVUkw9ZmZtcGVnLmpzLm1hcA=="></script>
+    <script src="data:application/javascript;base64,IWZ1bmN0aW9uKGUsdCl7Im9iamVjdCI9PXR5cGVvZiBleHBvcnRzJiYib2JqZWN0Ij09dHlwZW9mIG1vZHVsZT9tb2R1bGUuZXhwb3J0cz10KCk6ImZ1bmN0aW9uIj09dHlwZW9mIGRlZmluZSYmZGVmaW5lLmFtZD9kZWZpbmUoW10sdCk6Im9iamVjdCI9PXR5cGVvZiBleHBvcnRzP2V4cG9ydHMuRkZtcGVnVXRpbD10KCk6ZS5GRm1wZWdVdGlsPXQoKX0oc2VsZiwoKCk9PigoKT0+eyJ1c2Ugc3RyaWN0Ijt2YXIgZT17NTkxOihlLHQpPT57T2JqZWN0LmRlZmluZVByb3BlcnR5KHQsIl9fZXNNb2R1bGUiLHt2YWx1ZTohMH0pLHQuSGVhZGVyQ29udGVudExlbmd0aD12b2lkIDAsdC5IZWFkZXJDb250ZW50TGVuZ3RoPSJDb250ZW50LUxlbmd0aCJ9LDQzMTooZSx0KT0+e09iamVjdC5kZWZpbmVQcm9wZXJ0eSh0LCJfX2VzTW9kdWxlIix7dmFsdWU6ITB9KSx0LkVSUk9SX0lOQ09NUExFVEVEX0RPV05MT0FEPXQuRVJST1JfUkVTUE9OU0VfQk9EWV9SRUFERVI9dm9pZCAwLHQuRVJST1JfUkVTUE9OU0VfQk9EWV9SRUFERVI9bmV3IEVycm9yKCJmYWlsZWQgdG8gZ2V0IHJlc3BvbnNlIGJvZHkgcmVhZGVyIiksdC5FUlJPUl9JTkNPTVBMRVRFRF9ET1dOTE9BRD1uZXcgRXJyb3IoImZhaWxlZCB0byBjb21wbGV0ZSBkb3dubG9hZCIpfSw5MTU6ZnVuY3Rpb24oZSx0LG8pe3ZhciByPXRoaXMmJnRoaXMuX19hd2FpdGVyfHxmdW5jdGlvbihlLHQsbyxyKXtyZXR1cm4gbmV3KG98fChvPVByb21pc2UpKSgoZnVuY3Rpb24obixpKXtmdW5jdGlvbiBkKGUpe3RyeXtsKHIubmV4dChlKSl9Y2F0Y2goZSl7aShlKX19ZnVuY3Rpb24gYShlKXt0cnl7bChyLnRocm93KGUpKX1jYXRjaChlKXtpKGUpfX1mdW5jdGlvbiBsKGUpe3ZhciB0O2UuZG9uZT9uKGUudmFsdWUpOih0PWUudmFsdWUsdCBpbnN0YW5jZW9mIG8/dDpuZXcgbygoZnVuY3Rpb24oZSl7ZSh0KX0pKSkudGhlbihkLGEpfWwoKHI9ci5hcHBseShlLHR8fFtdKSkubmV4dCgpKX0pKX07T2JqZWN0LmRlZmluZVByb3BlcnR5KHQsIl9fZXNNb2R1bGUiLHt2YWx1ZTohMH0pLHQudG9CbG9iVVJMPXQuZG93bmxvYWRXaXRoUHJvZ3Jlc3M9dC5pbXBvcnRTY3JpcHQ9dC5mZXRjaEZpbGU9dm9pZCAwO2NvbnN0IG49byg0MzEpLGk9byg1OTEpO3QuZmV0Y2hGaWxlPWU9PnIodm9pZCAwLHZvaWQgMCx2b2lkIDAsKGZ1bmN0aW9uKigpe2xldCB0O2lmKCJzdHJpbmciPT10eXBlb2YgZSl0PS9kYXRhOl9kYXRhXC8oW2EtekEtWl0qKTtiYXNlNjQsKFteIl0qKS8udGVzdChlKT9hdG9iKGUuc3BsaXQoIiwiKVsxXSkuc3BsaXQoIiIpLm1hcCgoZT0+ZS5jaGFyQ29kZUF0KDApKSk6eWllbGQoeWllbGQgZmV0Y2goZSkpLmFycmF5QnVmZmVyKCk7ZWxzZSBpZihlIGluc3RhbmNlb2YgVVJMKXQ9eWllbGQoeWllbGQgZmV0Y2goZSkpLmFycmF5QnVmZmVyKCk7ZWxzZXtpZighKGUgaW5zdGFuY2VvZiBGaWxlfHxlIGluc3RhbmNlb2YgQmxvYikpcmV0dXJuIG5ldyBVaW50OEFycmF5O3Q9eWllbGQobz1lLG5ldyBQcm9taXNlKCgoZSx0KT0+e2NvbnN0IHI9bmV3IEZpbGVSZWFkZXI7ci5vbmxvYWQ9KCk9Pntjb25zdHtyZXN1bHQ6dH09cjt0IGluc3RhbmNlb2YgQXJyYXlCdWZmZXI/ZShuZXcgVWludDhBcnJheSh0KSk6ZShuZXcgVWludDhBcnJheSl9LHIub25lcnJvcj1lPT57dmFyIG8scjt0KEVycm9yKGBGaWxlIGNvdWxkIG5vdCBiZSByZWFkISBDb2RlPSR7KG51bGw9PT0ocj1udWxsPT09KG89bnVsbD09ZT92b2lkIDA6ZS50YXJnZXQpfHx2b2lkIDA9PT1vP3ZvaWQgMDpvLmVycm9yKXx8dm9pZCAwPT09cj92b2lkIDA6ci5jb2RlKXx8LTF9YCkpfSxyLnJlYWRBc0FycmF5QnVmZmVyKG8pfSkpKX12YXIgbztyZXR1cm4gbmV3IFVpbnQ4QXJyYXkodCl9KSksdC5pbXBvcnRTY3JpcHQ9ZT0+cih2b2lkIDAsdm9pZCAwLHZvaWQgMCwoZnVuY3Rpb24qKCl7cmV0dXJuIG5ldyBQcm9taXNlKCh0PT57Y29uc3Qgbz1kb2N1bWVudC5jcmVhdGVFbGVtZW50KCJzY3JpcHQiKSxyPSgpPT57by5yZW1vdmVFdmVudExpc3RlbmVyKCJsb2FkIixyKSx0KCl9O28uc3JjPWUsby50eXBlPSJ0ZXh0L2phdmFzY3JpcHQiLG8uYWRkRXZlbnRMaXN0ZW5lcigibG9hZCIsciksZG9jdW1lbnQuZ2V0RWxlbWVudHNCeVRhZ05hbWUoImhlYWQiKVswXS5hcHBlbmRDaGlsZChvKX0pKX0pKSx0LmRvd25sb2FkV2l0aFByb2dyZXNzPShlLHQpPT5yKHZvaWQgMCx2b2lkIDAsdm9pZCAwLChmdW5jdGlvbiooKXt2YXIgbztjb25zdCByPXlpZWxkIGZldGNoKGUpO2xldCBkO3RyeXtjb25zdCBhPXBhcnNlSW50KHIuaGVhZGVycy5nZXQoaS5IZWFkZXJDb250ZW50TGVuZ3RoKXx8Ii0xIiksbD1udWxsPT09KG89ci5ib2R5KXx8dm9pZCAwPT09bz92b2lkIDA6by5nZXRSZWFkZXIoKTtpZighbCl0aHJvdyBuLkVSUk9SX1JFU1BPTlNFX0JPRFlfUkVBREVSO2NvbnN0IGM9W107bGV0IHM9MDtmb3IoOzspe2NvbnN0e2RvbmU6byx2YWx1ZTpyfT15aWVsZCBsLnJlYWQoKSxpPXI/ci5sZW5ndGg6MDtpZihvKXtpZigtMSE9YSYmYSE9PXMpdGhyb3cgbi5FUlJPUl9JTkNPTVBMRVRFRF9ET1dOTE9BRDt0JiZ0KHt1cmw6ZSx0b3RhbDphLHJlY2VpdmVkOnMsZGVsdGE6aSxkb25lOm99KTticmVha31jLnB1c2gocikscys9aSx0JiZ0KHt1cmw6ZSx0b3RhbDphLHJlY2VpdmVkOnMsZGVsdGE6aSxkb25lOm99KX1jb25zdCBmPW5ldyBVaW50OEFycmF5KHMpO2xldCB1PTA7Zm9yKGNvbnN0IGUgb2YgYylmLnNldChlLHUpLHUrPWUubGVuZ3RoO2Q9Zi5idWZmZXJ9Y2F0Y2gobyl7Y29uc29sZS5sb2coImZhaWxlZCB0byBzZW5kIGRvd25sb2FkIHByb2dyZXNzIGV2ZW50OiAiLG8pLGQ9eWllbGQgci5hcnJheUJ1ZmZlcigpLHQmJnQoe3VybDplLHRvdGFsOmQuYnl0ZUxlbmd0aCxyZWNlaXZlZDpkLmJ5dGVMZW5ndGgsZGVsdGE6MCxkb25lOiEwfSl9cmV0dXJuIGR9KSksdC50b0Jsb2JVUkw9KGUsbyxuPSExLGkpPT5yKHZvaWQgMCx2b2lkIDAsdm9pZCAwLChmdW5jdGlvbiooKXtjb25zdCByPW4/eWllbGQoMCx0LmRvd25sb2FkV2l0aFByb2dyZXNzKShlLGkpOnlpZWxkKHlpZWxkIGZldGNoKGUpKS5hcnJheUJ1ZmZlcigpLGQ9bmV3IEJsb2IoW3JdLHt0eXBlOm99KTtyZXR1cm4gVVJMLmNyZWF0ZU9iamVjdFVSTChkKX0pKX19LHQ9e307cmV0dXJuIGZ1bmN0aW9uIG8ocil7dmFyIG49dFtyXTtpZih2b2lkIDAhPT1uKXJldHVybiBuLmV4cG9ydHM7dmFyIGk9dFtyXT17ZXhwb3J0czp7fX07cmV0dXJuIGVbcl0uY2FsbChpLmV4cG9ydHMsaSxpLmV4cG9ydHMsbyksaS5leHBvcnRzfSg5MTUpfSkoKSkpOw=="></script>
     <script>
       (function () {
         'use strict';
 
-        var CORE_BASE = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/esm';
-        var FFMPEG_BASE = 'https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.15/dist/umd';
+        // FFmpeg engine files are bundled with this page (assets/ffmpeg/).
+        // CDN mirrors are only a fallback if the bundled files cannot load.
+        var ASSET_BASE = new URL('assets/ffmpeg/', document.baseURI).href;
+        var CORE_SOURCES = [
+          { label: '同梱ファイル', base: ASSET_BASE },
+          { label: 'jsdelivr', base: 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/umd/' },
+          { label: 'unpkg', base: 'https://unpkg.com/@ffmpeg/core@0.12.10/dist/umd/' }
+        ];
+        var LIB_SOURCES = [
+          ASSET_BASE + 'ffmpeg.js',
+          'https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.15/dist/umd/ffmpeg.js',
+          'https://unpkg.com/@ffmpeg/ffmpeg@0.12.15/dist/umd/ffmpeg.js',
+          'https://cdnjs.cloudflare.com/ajax/libs/ffmpeg/0.12.15/umd/ffmpeg.min.js'
+        ];
         var VIDEO_PLAYABLE = ['h264', 'hevc', 'mpeg4'];
         var AUDIO_PLAYABLE = ['aac', 'mp3', 'alac'];
         var OK_EXT = ['mpg', 'mpeg', 'vob', 'm2v'];
@@ -330,23 +342,126 @@
           });
         }
 
-        function loadFFmpeg(onStage) {
-          if (loaded) return Promise.resolve();
-          if (!window.FFmpegWASM || !window.FFmpegUtil) {
-            return Promise.reject(new Error('変換エンジン本体の読み込みに失敗しました。通信環境を確認して、ページを再読み込みしてください。'));
+        var loadSeq = 0; // incremented on cancel to invalidate an in-flight load
+
+        function loadScript(url) {
+          return new Promise(function (resolve, reject) {
+            var s = document.createElement('script');
+            s.src = url;
+            s.async = true;
+            s.onload = function () { resolve(); };
+            s.onerror = function () { reject(new Error('読み込み失敗: ' + url)); };
+            document.head.appendChild(s);
+          });
+        }
+
+        // Load the FFmpeg library script from the first source that works
+        // (bundled file first, then CDN mirrors). Only needed if the bundled
+        // <script> tags did not produce the global.
+        function ensureLibs() {
+          if (window.FFmpegWASM) return Promise.resolve();
+          var i = 0;
+          function next() {
+            if (window.FFmpegWASM) return Promise.resolve();
+            if (i >= LIB_SOURCES.length) {
+              throw new Error('変換エンジン本体(ffmpeg.js)を読み込めませんでした(同梱ファイル / jsdelivr / unpkg / cdnjs のすべてで失敗)。通信環境を確認してください。');
+            }
+            var url = LIB_SOURCES[i++];
+            return loadScript(url).then(next, next);
           }
-          var toBlobURL = window.FFmpegUtil.toBlobURL;
-          ffmpeg = new window.FFmpegWASM.FFmpeg();
-          attachHandlers();
-          onStage && onStage('変換エンジン(FFmpeg)を読み込んでいます… 初回は約31MBあります');
-          return Promise.all([
-            toBlobURL(FFMPEG_BASE + '/814.ffmpeg.js', 'text/javascript'),
-            toBlobURL(CORE_BASE + '/ffmpeg-core.js', 'text/javascript'),
-            toBlobURL(CORE_BASE + '/ffmpeg-core.wasm', 'application/wasm')
-          ]).then(function (urls) {
-            return ffmpeg.load({ classWorkerURL: urls[0], coreURL: urls[1], wasmURL: urls[2] });
-          }).then(function () {
-            loaded = true;
+          return next();
+        }
+
+        // fetch() with byte progress, returned as a blob URL.
+        function fetchBlobURL(url, mimeType, report) {
+          return fetch(url).then(function (res) {
+            if (!res.ok) throw new Error('HTTP ' + res.status + ' (' + url + ')');
+            var total = parseInt(res.headers.get('Content-Length') || '0', 10) || 0;
+            if (!res.body || !res.body.getReader) {
+              return res.arrayBuffer().then(function (buf) {
+                if (report) report(total || buf.byteLength, total || buf.byteLength);
+                return URL.createObjectURL(new Blob([buf], { type: mimeType }));
+              });
+            }
+            var reader = res.body.getReader();
+            var chunks = [], received = 0;
+            function pump() {
+              return reader.read().then(function (r) {
+                if (r.done) return null;
+                chunks.push(r.value);
+                received += r.value.byteLength;
+                if (report) report(received, total);
+                return pump();
+              });
+            }
+            return pump().then(function () {
+              return URL.createObjectURL(new Blob(chunks, { type: mimeType }));
+            });
+          }).catch(function (err) {
+            throw new Error((err && err.message ? err.message : err) + ' [' + url + ']');
+          });
+        }
+
+        function withTimeout(promise, ms, label) {
+          return Promise.race([
+            promise,
+            new Promise(function (resolve, reject) {
+              setTimeout(function () { reject(new Error(label + 'がタイムアウトしました(' + Math.round(ms / 1000) + '秒)')); }, ms);
+            })
+          ]);
+        }
+
+        function fileToUint8Array(file) {
+          if (window.FFmpegUtil && window.FFmpegUtil.fetchFile) return window.FFmpegUtil.fetchFile(file);
+          return file.arrayBuffer().then(function (buf) { return new Uint8Array(buf); });
+        }
+
+        // onProgress(text, ratio|null): engine download/startup progress.
+        // The worker script (814.ffmpeg.js) sits next to ffmpeg.js, so the
+        // library locates it automatically — no classWorkerURL is passed
+        // (passing one would switch the worker to module mode and break
+        // importScripts() of the UMD core).
+        function loadFFmpeg(onProgress) {
+          if (loaded) return Promise.resolve();
+          var seq = loadSeq;
+          function checkSeq() { if (seq !== loadSeq) throw new Error('__cancelled__'); }
+          return ensureLibs().then(function () {
+            var errors = [];
+            function attempt(idx) {
+              if (idx >= CORE_SOURCES.length) {
+                throw new Error('変換エンジン(FFmpeg、約31MB)の読み込みに失敗しました。試した読み込み元とエラー:\n' + errors.join('\n'));
+              }
+              checkSeq();
+              var src = CORE_SOURCES[idx];
+              var baseText = '変換エンジン(FFmpeg、約31MB)を読み込んでいます…[' + src.label + ']';
+              if (onProgress) onProgress(baseText, 0);
+              var got = { js: 0, wasm: 0 }, tot = { js: 0, wasm: 0 };
+              function rep() {
+                var g = got.js + got.wasm, t = tot.js + tot.wasm;
+                if (onProgress) onProgress(baseText, t > 0 ? g / t : null);
+              }
+              var blobURLs = [];
+              return Promise.all([
+                fetchBlobURL(src.base + 'ffmpeg-core.js', 'text/javascript', function (r, t) { got.js = r; tot.js = t; rep(); }),
+                fetchBlobURL(src.base + 'ffmpeg-core.wasm', 'application/wasm', function (r, t) { got.wasm = r; tot.wasm = t; rep(); })
+              ]).then(function (urls) {
+                blobURLs = urls;
+                checkSeq();
+                if (onProgress) onProgress('変換エンジンを起動しています…', 1);
+                ffmpeg = new window.FFmpegWASM.FFmpeg();
+                attachHandlers();
+                return withTimeout(ffmpeg.load({ coreURL: urls[0], wasmURL: urls[1] }), 150000, '変換エンジンの起動');
+              }).then(function () {
+                loaded = true;
+              }).catch(function (err) {
+                blobURLs.forEach(function (u) { URL.revokeObjectURL(u); });
+                if (ffmpeg) { try { ffmpeg.terminate(); } catch (e) {} ffmpeg = null; }
+                if (seq !== loadSeq) throw err;
+                errors.push('・' + src.label + ': ' + (err && err.message ? err.message : err));
+                return attempt(idx + 1);
+              });
+            }
+            return attempt(0);
           });
         }
 
@@ -481,10 +596,13 @@
           statusSub.textContent = '';
           progressPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 
-          loadFFmpeg(function (t) { statusText.textContent = t; })
+          loadFFmpeg(function (t, r) {
+              statusText.textContent = t + (r != null && r < 1 ? ' ' + Math.round(r * 100) + '%' : '');
+              if (r != null) barFill.style.width = (r * 100).toFixed(1) + '%';
+            })
             .then(function () {
               statusText.textContent = 'ファイルを読み込んでいます…(' + fmtSize(currentFile.size) + ')';
-              return window.FFmpegUtil.fetchFile(currentFile).then(function (data) {
+              return fileToUint8Array(currentFile).then(function (data) {
                 return ffmpeg.writeFile(inputName, data);
               });
             })
@@ -535,8 +653,11 @@
               logBuffer = null;
               busy = false;
               probeBtn.disabled = false;
+              probeBtn.textContent = '再試行する';
               progressPanel.classList.add('hidden');
-              if (!cancelled) showError('解析に失敗しました。\n' + (err && err.message ? err.message : err));
+              if (!cancelled && !(err && err.message === '__cancelled__')) {
+                showError('解析に失敗しました。「再試行する」ボタンで、ページを再読み込みせずにやり直せます。\n' + (err && err.message ? err.message : err));
+              }
             });
         });
 
@@ -623,8 +744,9 @@
         cancelBtn.addEventListener('click', function () {
           if (!busy) return;
           cancelled = true;
+          loadSeq++;
           stopTimer();
-          try { ffmpeg.terminate(); } catch (e) {}
+          try { if (ffmpeg) ffmpeg.terminate(); } catch (e) {}
           loaded = false;
           busy = false;
           plan = null;
