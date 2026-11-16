@@ -194,6 +194,10 @@
       .part-item:first-child { border-top: none; padding-top: 4px; }
       .part-name { font-size: 14px; font-weight: 600; margin: 0 0 2px; word-break: break-all; }
       .part-meta { font-size: 13px; color: var(--muted); margin: 0 0 10px; }
+      .parts-backup { margin-top: 18px; border-top: 1px solid var(--border); padding-top: 12px; }
+      .parts-backup summary { font-size: 13px; color: var(--muted); cursor: pointer; padding: 6px 0; }
+      .part-item.compact { padding: 10px 0 2px; }
+      .part-item.compact .btn-row > * { flex: 1 1 120px; min-height: 40px; font-size: 13px; }
 
       @media (max-width: 480px) {
         h1 { font-size: 21px; }
@@ -221,13 +225,23 @@
         <input type="file" id="fileInput" accept=".mpg,.mpeg,.vob,.m2v,video/mpeg,video/mp2t" />
       </div>
 
+      <!-- OPFS backup of the previous result (survives a crash) -->
+      <section class="panel hidden" id="backupPanel">
+        <h2>前回の変換結果が残っています</h2>
+        <p class="plan-detail" id="backupInfo" style="margin:0 0 12px"></p>
+        <div class="btn-row">
+          <button type="button" class="btn-primary" id="restoreBtn">復元する</button>
+          <button type="button" id="discardBackupBtn">削除する</button>
+        </div>
+      </section>
+
       <!-- file info + plan -->
       <section class="panel hidden" id="infoPanel">
         <h2>選択中のファイル</h2>
         <table class="info">
           <tr><th>ファイル名</th><td id="infoName">—</td></tr>
           <tr><th>サイズ</th><td id="infoSize">—</td></tr>
-          <tr id="rowLarge" class="hidden"><th>大きいファイル</th><td><span class="large-note">大きいため分割して変換します</span><p class="extreme-note hidden" id="extremeWarn">このサイズはこの端末では変換できない可能性があります</p></td></tr>
+          <tr id="rowLarge" class="hidden"><th>大きいファイル</th><td><span class="large-note">大きいため分割して変換し、1本に連結します</span><p class="extreme-note hidden" id="extremeWarn">このサイズはこの端末では変換できない可能性があります</p></td></tr>
           <tr id="rowDuration" class="hidden"><th>長さ</th><td id="infoDuration">—</td></tr>
           <tr id="rowVideo" class="hidden"><th>映像</th><td><span class="mono" id="infoVideo">—</span> <span id="infoVideoPlan"></span></td></tr>
           <tr id="rowAudio" class="hidden"><th>音声</th><td><span class="mono" id="infoAudio">—</span> <span id="infoAudioPlan"></span></td></tr>
@@ -263,6 +277,8 @@
       <section class="panel hidden" id="resultPanel">
         <h2>変換が完了しました</h2>
         <div id="singleResult">
+          <button type="button" id="previewLoadBtn" class="btn-block hidden" style="margin-bottom:10px">タップでプレビューを表示</button>
+          <p class="plan-detail hidden" id="previewSkippedNote" style="margin:0 0 14px">大きいファイル(1GB超)のため、プレビューは自動で読み込みません。先に下のボタンで保存してください。プレビューが必要な時だけ上のボタンを押してください。</p>
           <video class="preview" id="preview" controls playsinline preload="metadata"></video>
           <p class="preview-error hidden" id="previewError">このファイルはこのブラウザで再生できない形式です。共有/ダウンロードで保存して写真・ファイルアプリで開いてください。</p>
           <table class="info" style="margin-bottom:14px">
@@ -276,14 +292,19 @@
             <button type="button" class="btn-primary" id="shareBtn">共有して保存</button>
             <a class="btn" id="downloadBtn" href="#" download>ダウンロード</a>
           </div>
-          <p class="plan-detail">アプリ内ブラウザでは「ダウンロード」が効かないことがあります。その場合は「共有して保存」から写真アプリやファイルに保存してください。</p>
+          <p class="plan-detail" id="saveNote">アプリ内ブラウザでは「ダウンロード」が効かないことがあります。その場合は「共有して保存」から写真アプリやファイルに保存してください。</p>
+          <p class="plan-detail hidden" id="largeSaveNote">大きいファイルは共有だと落ちることがあるため、ダウンロードで保存してください</p>
         </div>
         <div id="partsResult" class="hidden">
           <p class="plan-detail" id="partsSummary" style="margin:0 0 6px"></p>
           <div id="partsList"></div>
         </div>
+        <p class="plan-detail hidden" id="backupStatus" style="margin-top:14px"></p>
         <div style="margin-top:14px">
           <button type="button" id="againBtn" class="btn-block">別のファイルを変換</button>
+        </div>
+        <div style="margin-top:10px">
+          <button type="button" id="deleteBackupBtn" class="btn-block hidden">退避した結果を削除</button>
         </div>
       </section>
 
@@ -292,7 +313,7 @@
       <div class="notes">
         <ul>
           <li>変換は端末内だけで処理され、ファイルが外部に送信されることはありません</li>
-          <li>大きいファイルは自動で分割して変換します</li>
+          <li>大きいファイルは自動で分割して変換し、1本に連結します</li>
           <li>初回のみ変換エンジン (約32MB) を読み込みます</li>
         </ul>
       </div>
@@ -344,6 +365,26 @@
         var errorBox = $('errorBox');
         var modePicker = $('modePicker'), qualitySelect = $('qualitySelect'), qualityNote = $('qualityNote'), previewError = $('previewError');
         var singleResult = $('singleResult'), partsResult = $('partsResult'), partsList = $('partsList'), partsSummary = $('partsSummary');
+        var previewLoadBtn = $('previewLoadBtn'), previewSkippedNote = $('previewSkippedNote'), largeSaveNote = $('largeSaveNote');
+        var saveNote = $('saveNote');
+        var backupPanel = $('backupPanel'), backupInfo = $('backupInfo'), restoreBtn = $('restoreBtn'), discardBackupBtn = $('discardBackupBtn');
+        var backupStatus = $('backupStatus'), deleteBackupBtn = $('deleteBackupBtn');
+        // Above this size the result is NEVER handed to
+        // navigator.share: passing a GB-scale File to the iOS
+        // share sheet exhausts memory and kills the page (this
+        // is exactly what happened with the joined 1.6GB result
+        // — the join itself was fine). Large results save ONLY
+        // through the download anchor, whose object URL the
+        // browser streams to disk without loading it into
+        // memory. At or below this size sharing stays primary.
+        var SHARE_LIMIT = 500 * 1024 * 1024; // 500MB
+        // Above this size the joined result is NOT auto-loaded into
+        // the <video> preview (Safari can fail / OOM just building
+        // the preview for a GB-scale Blob, which would take the
+        // whole result screen down with it). Saving never depends
+        // on the preview. This is a preview-only threshold — the
+        // join itself has NO size limit of any kind.
+        var PREVIEW_AUTOLOAD_LIMIT = 1024 * 1024 * 1024; // 1GB
 
         var ffmpeg = null;
         var loaded = false;
@@ -357,12 +398,25 @@
         var logBuffer = null;      // string[] while probing
         var resultBlob = null;
         var resultURL = null;
-        // Large-file segmented conversion (memory countermeasure; the
-        // quality settings are never changed for large files).
-        var LARGE_THRESHOLD = 250 * 1024 * 1024;   // > 250MB: segmented mode
+        // Large-file handling (memory countermeasure; the quality
+        // settings are never changed for large files). The whole file is
+        // NEVER read into memory at once: probing uses only a head slice,
+        // and conversion of large files reads the input lazily through a
+        // WORKERFS mount (or, failing that, 32MB chunk files + concat).
+        var LARGE_THRESHOLD = 100 * 1024 * 1024;   // > 100MB: lazy load + segmented mode
         var EXTREME_THRESHOLD = 1024 * 1024 * 1024; // > 1GB: warn before starting
+        var HEAD_PROBE_BYTES = 16 * 1024 * 1024;   // probe reads only this head slice
+        var CHUNK_BYTES = 32 * 1024 * 1024;        // chunked-loading slice size
+        var MOUNT_POINT = '/mnt';
+        var preparedInput = null;  // {mode:'workerfs'|'chunk'|'memfs', path, files[]} while an input is prepared
         var resultParts = [];      // [{name, blob, url, verify}] in segmented mode
         var segState = null;       // {index, count} while converting a part
+        var joining = false;       // true while the moov-merge join runs (progress label)
+        var extractMethod = null;  // 'A' | 'B': extraction seek method locked in by the first successful part
+        var extractMap = null;     // 'M1' | 'M2' | 'M3': stream-map strategy locked in together with it
+        var inputModeLock = null;  // 'workerfs' | 'chunk': lazy input mode locked in together with it
+        var lastExtractLogTail = ''; // tail of the latest extraction FFmpeg log, shown when extraction fails completely
+        var engineCrashDetected = false; // legacy flag, kept cleared: true crashes are now reported per-attempt via {crashed} from tryExtractOnce (exec promise rejection / no log at all), never from "Aborted" appearing in a log
         var segmenting = false;    // true during a segmented conversion run
         var startTime = 0;
         var timerId = null;
@@ -404,12 +458,26 @@
             var p = e.progress;
             if (!isFinite(p)) return;
             p = Math.max(0, Math.min(1, p));
-            if (segState && segState.count > 0) {
-              // Overall progress: finished parts + this part's progress.
-              var overall = (segState.index + p) / segState.count;
-              barFill.style.width = (overall * 100).toFixed(1) + '%';
-              statusText.textContent = 'パート ' + (segState.index + 1) + ' / ' + segState.count + ' を変換中… ' + Math.round(p * 100) + '%';
-              statusSub.textContent = '全体 ' + Math.round(overall * 100) + '%';
+            if (segState) {
+              if (segState.count > 0) {
+                // Overall progress: finished parts + this part's progress.
+                var overall = (segState.index + p) / segState.count;
+                barFill.style.width = (overall * 100).toFixed(1) + '%';
+                statusText.textContent = 'パート ' + (segState.index + 1) + ' / ' + segState.count + ' を変換中… ' + Math.round(p * 100) + '%';
+                statusSub.textContent = '全体 ' + Math.round(overall * 100) + '%';
+              } else {
+                // Total part count unknown (duration not measurable):
+                // show only this part's progress.
+                barFill.style.width = (p * 100).toFixed(1) + '%';
+                statusText.textContent = 'パート ' + (segState.index + 1) + ' を変換中… ' + Math.round(p * 100) + '%';
+                statusSub.textContent = '';
+              }
+              return;
+            }
+            if (joining) {
+              barFill.style.width = (p * 100).toFixed(1) + '%';
+              statusText.textContent = 'パートを1本の動画に連結しています… ' + Math.round(p * 100) + '%';
+              statusSub.textContent = '';
               return;
             }
             barFill.style.width = (p * 100).toFixed(1) + '%';
@@ -568,7 +636,20 @@
           ]);
         }
 
-        function fileToUint8Array(file) {
+        // Read ONE Blob/File slice into memory. This is the only way file
+        // bytes ever enter JS memory, and callers must pass a bounded
+        // slice (head probe / one 32MB chunk / a small file at conversion
+        // time) — never a large file as a whole.
+        function sliceToUint8Array(slice) {
+          return blobToUint8Array(slice);
+        }
+        // Small files only (<= LARGE_THRESHOLD), called at conversion
+        // start — never at selection or probe time. Refuses large files
+        // outright instead of falling back to a whole-file read.
+        function smallFileToUint8Array(file) {
+          if (file.size > LARGE_THRESHOLD) {
+            return Promise.reject(new Error('この端末では大きいファイルを読み込めません'));
+          }
           if (window.FFmpegUtil && window.FFmpegUtil.fetchFile) return window.FFmpegUtil.fetchFile(file);
           return file.arrayBuffer().then(function (buf) { return new Uint8Array(buf); });
         }
@@ -680,6 +761,281 @@
           });
         }
 
+        /* ---------- lazy input preparation (no whole-file read) ---------- */
+
+        // Run `ffmpeg -i <path>` against an already-accessible path (a
+        // MEMFS file, a WORKERFS mount path, or a concat: URL) and parse
+        // the stream info from its log. Reads no file bytes into JS.
+        function probeAccessiblePath(path, extraInputArgs) {
+          logBuffer = [];
+          var args = (extraInputArgs || []).concat(['-i', path]);
+          return ffmpeg.exec(args).then(function () {
+            var text = (logBuffer || []).join('\n');
+            logBuffer = null;
+            return parseStreams(text);
+          }, function (err) {
+            logBuffer = null;
+            throw err;
+          });
+        }
+
+        // (a) WORKERFS: mount the File itself. Nothing is copied into the
+        // virtual FS; the core reads only the bytes it needs, on demand.
+        function tryMountWorkerFS() {
+          var fsType = (window.FFmpegWASM && window.FFmpegWASM.FFFSType && window.FFmpegWASM.FFFSType.WORKERFS) || 'WORKERFS';
+          return ffmpeg.createDir(MOUNT_POINT).catch(function () {}).then(function () {
+            return ffmpeg.mount(fsType, { files: [currentFile] }, MOUNT_POINT);
+          }).then(function (res) {
+            if (res === false) throw new Error('WORKERFS mount refused');
+            return ffmpeg.listDir(MOUNT_POINT);
+          }).then(function (entries) {
+            var found = false;
+            (entries || []).forEach(function (en) {
+              var nm = typeof en === 'string' ? en : (en && en.name);
+              if (nm === currentFile.name) found = true;
+            });
+            if (!found) throw new Error('WORKERFS mount did not expose the file');
+            return { mode: 'workerfs', path: MOUNT_POINT + '/' + currentFile.name, files: [] };
+          });
+        }
+        function unmountWorkerFS() {
+          if (!ffmpeg) return Promise.resolve();
+          return ffmpeg.unmount(MOUNT_POINT).catch(function () {}).then(function () {
+            return ffmpeg.deleteDir(MOUNT_POINT).catch(function () {});
+          });
+        }
+
+        // (b) Chunked loading: read the file 32MB at a time with
+        // File.slice and write each chunk as in.partNNN into the virtual
+        // FS. Only one chunk exists on the JS side at any moment. FFmpeg
+        // sees the chunks as one input via the concat protocol.
+        function tryChunkedInput() {
+          var ext = extOf(currentFile.name);
+          var names = [];
+          var total = Math.ceil(currentFile.size / CHUNK_BYTES);
+          function pad3(n) { return ('000' + n).slice(-3); }
+          var chain = Promise.resolve();
+          var writeOne = function (idx) {
+            return function () {
+              checkCancelled();
+              statusText.textContent = 'ファイルを読み込んでいます…(' + (idx + 1) + ' / ' + total + ')';
+              var start = idx * CHUNK_BYTES;
+              var slice = currentFile.slice(start, Math.min(currentFile.size, start + CHUNK_BYTES));
+              var name = 'in.part' + pad3(idx);
+              return sliceToUint8Array(slice).then(function (bytes) {
+                slice = null;
+                return ffmpeg.writeFile(name, bytes).then(function () {
+                  bytes = null;
+                  names.push(name);
+                });
+              });
+            };
+          };
+          for (var i = 0; i < total; i++) chain = chain.then(writeOne(i));
+          return chain.then(function () {
+            checkCancelled();
+            if (!names.length) throw new Error('chunk write produced nothing');
+            return { mode: 'chunk', path: 'concat:' + names.join('|'), files: names.slice() };
+          }).catch(function (err) {
+            // Clean up any chunk files written so far before giving up.
+            var del = Promise.resolve();
+            names.forEach(function (nm) { del = del.then(function () { return deleteFileSafe(nm); }); });
+            return del.then(function () { throw err; });
+          });
+        }
+
+        // Prepare the current file for FFmpeg without a whole-file read.
+        // Large files: WORKERFS first, chunked concat second, and NO
+        // whole-file fallback — if neither works the caller stops with a
+        // short message instead of crashing the tab. Small files are
+        // written whole, but only here (i.e. at conversion start).
+        function prepareInput(forceMode) {
+          if (!isLargeFile()) {
+            return smallFileToUint8Array(currentFile).then(function (data) {
+              return ffmpeg.writeFile(inputName, data).then(function () {
+                data = null;
+                preparedInput = { mode: 'memfs', path: inputName, files: [inputName] };
+                return preparedInput;
+              });
+            });
+          }
+          statusText.textContent = '大きいファイルを読み込んでいます…';
+          // Forced single-mode prepare, used by the segmented extraction
+          // fallback chain: errors propagate so the caller can switch to
+          // the other input mode itself.
+          if (forceMode === 'workerfs' || forceMode === 'chunk') {
+            var attempt = (forceMode === 'chunk') ? tryChunkedInput() : tryMountWorkerFS();
+            return attempt.then(function (p) {
+              preparedInput = p;
+              return p;
+            });
+          }
+          return tryMountWorkerFS().then(function (p) {
+            preparedInput = p;
+            return p;
+          }, function () {
+            checkCancelled();
+            return tryChunkedInput().then(function (p) {
+              preparedInput = p;
+              return p;
+            }, function () {
+              throw new Error('この端末では大きいファイルを読み込めません');
+            });
+          });
+        }
+
+        // Release a prepared input: unmount WORKERFS, or delete the
+        // chunk / MEMFS files from the virtual FS.
+        function cleanupPreparedInput() {
+          var p = preparedInput;
+          preparedInput = null;
+          if (!p || !ffmpeg) return Promise.resolve();
+          if (p.mode === 'workerfs') return unmountWorkerFS();
+          var chain = Promise.resolve();
+          (p.files || []).forEach(function (nm) {
+            chain = chain.then(function () { return deleteFileSafe(nm); });
+          });
+          return chain;
+        }
+
+        // Input-side ffmpeg args for a prepared input (the chunk mode
+        // needs the concat protocol whitelisted explicitly).
+        function inputArgsFor(prepared, srcPath) {
+          if (prepared && prepared.mode === 'chunk') {
+            return ['-protocol_whitelist', 'file,concat', '-i', srcPath];
+          }
+          return ['-i', srcPath];
+        }
+
+        function tailLines(text, n) {
+          var lines = String(text || '').split('\n').filter(function (l) { return l.trim().length > 0; });
+          return lines.slice(-n).join('\n');
+        }
+
+        // Final muxer stats of an extraction run: how much video data
+        // was actually written and how far the timestamps advanced.
+        // An input-seek copy over an input that cannot really seek
+        // exits 0 with all of these at zero — that is how an empty
+        // extraction is told apart from a real one.
+        function parseExtractStats(text) {
+          var timeSec = null, videoKB = null, sizeKB = null, m;
+          var timeRe = /time=(\d+):(\d+):(\d+(?:\.\d+)?)/g, lastTime = null;
+          while ((m = timeRe.exec(text)) !== null) lastTime = m;
+          if (lastTime) timeSec = (+lastTime[1]) * 3600 + (+lastTime[2]) * 60 + (+lastTime[3]);
+          var vm = /video:\s*(\d+)\s*(?:kB|KiB)\b/.exec(text);
+          if (vm) videoKB = +vm[1];
+          var lm = /Lsize=\s*(\d+)\s*(?:kB|KiB)\b/.exec(text);
+          if (lm) { sizeKB = +lm[1]; }
+          else {
+            var sizeRe = /size=\s*(\d+)\s*(?:kB|KiB)\b/g, lastSize = null;
+            while ((m = sizeRe.exec(text)) !== null) lastSize = m;
+            if (lastSize) sizeKB = +lastSize[1];
+          }
+          return { timeSec: timeSec, videoKB: videoKB, sizeKB: sizeKB };
+        }
+
+        // Stream-map strategies for extraction. M1 copies every
+        // stream, but some streams in broadcast .mpg files (subtitle /
+        // data / caption streams, unknown codecs) cannot be stored
+        // even in Matroska: the muxer then fails at the header with
+        // "Could not write header … Invalid argument" and aborts.
+        // Those streams could never reach the final MP4 anyway, so
+        // M2 keeps video + ALL audio (multiple audio tracks survive)
+        // and M3 keeps just the first video + first audio.
+        function mapArgsFor(strategy) {
+          if (strategy === 'M2') return ['-map', '0:v', '-map', '0:a'];
+          if (strategy === 'M3') return ['-map', '0:v:0', '-map', '0:a:0?'];
+          return ['-map', '0'];
+        }
+
+        // One extraction attempt for one part, verified before it
+        // counts as a success. Method A is the original input seek
+        // (-ss before -i): fast, but over an input that cannot really
+        // seek (WORKERFS mount / concat: URL) — or when MPEG-PS start
+        // timestamps confuse stream copy — it silently produces an
+        // empty file instead of an error. Method B is an output seek
+        // (-ss after -i): the input is read from the head and packets
+        // are discarded by timestamp, so it works on any input.
+        // -ignore_unknown is always passed so streams with unknown
+        // codecs are skipped by the demuxer instead of reaching the
+        // muxer at all. An attempt only counts when the segment is
+        // non-empty (mux stats show data / advancing time), probes
+        // with a video stream, and has a positive duration (probe or
+        // mux stats).
+        //
+        // Crash detection — IMPORTANT: ffmpeg.wasm appends
+        // "Aborted()" to the log of ORDINARY failures too (both
+        // user-reported header-write failures ended with it), so
+        // the mere presence of "Aborted" in the log is NOT a crash
+        // and must never short-circuit the fallback chain: a
+        // header failure under M1 is exactly what M2/M3 exist to
+        // rescue. Success/failure of an attempt is decided ONLY by
+        // the verification above (code, mux stats, probe). An
+        // instance is treated as truly dead (crashed:true) only
+        // when there is a sign the worker itself is gone:
+        //   - the exec() promise itself rejects/throws, or
+        //   - exec() returns having produced no log output at all.
+        // In those cases the caller restarts the engine and runs
+        // the part's FULL fallback chain again on the fresh
+        // instance (see extractOnePart), so untried combinations
+        // are never skipped.
+        async function tryExtractOnce(prepared, method, mapStrategy, startSec, durSec, outName) {
+          var args = ['-y'];
+          if (prepared.mode === 'chunk') args.push('-protocol_whitelist', 'file,concat');
+          var mapArgs = mapArgsFor(mapStrategy);
+          if (method === 'A') {
+            args.push('-ss', String(startSec), '-ignore_unknown', '-i', prepared.path,
+                      '-t', String(durSec), '-threads', '1');
+            args = args.concat(mapArgs, ['-c', 'copy', '-avoid_negative_ts', 'make_zero', outName]);
+          } else {
+            args.push('-ignore_unknown', '-i', prepared.path,
+                      '-ss', String(startSec), '-t', String(durSec), '-threads', '1');
+            args = args.concat(mapArgs, ['-c', 'copy', '-avoid_negative_ts', 'make_zero', outName]);
+          }
+          var code = -1, logText = '';
+          var execThrew = false;
+          logBuffer = [];
+          try {
+            code = await ffmpeg.exec(args);
+          } catch (e) {
+            if (cancelled) { logBuffer = null; throw e; }
+            // The exec promise itself rejected: the worker is
+            // gone, not an ordinary conversion failure.
+            execThrew = true;
+            code = -1;
+          }
+          logText = (logBuffer || []).join('\n');
+          logBuffer = null;
+          lastExtractLogTail = tailLines(logText, 20);
+          // NOTE: no check of logText for "Aborted" here — see the
+          // comment above. Ordinary failures (non-zero code, with
+          // a log explaining why) are just failed attempts: the
+          // caller moves on to the next seek method / map strategy
+          // / input mode on this same instance.
+          if (execThrew) return { ok: false, info: null, crashed: true };
+          if (!logText.trim()) {
+            // exec returned but produced no log at all: ffmpeg
+            // always logs, so silence means the instance is dead.
+            return { ok: false, info: null, crashed: true };
+          }
+          if (code !== 0) return { ok: false, info: null, crashed: false };
+          var stats = parseExtractStats(logText);
+          var info = null;
+          var probeThrew = false;
+          try { info = await probeAccessiblePath(outName); } catch (e) {
+            if (cancelled) throw e;
+            // Same rule for the probe exec: a rejected promise is
+            // a dead-instance sign; a probe that merely finds no
+            // usable streams is an ordinary failed attempt.
+            probeThrew = true;
+            info = null;
+          }
+          if (probeThrew) return { ok: false, info: null, crashed: true };
+          var probeDurOk = !!(info && isFinite(info.duration) && info.duration > 0);
+          var statsOk = (stats.videoKB != null && stats.videoKB > 0) || (stats.timeSec != null && stats.timeSec > 0);
+          return { ok: !!(info && info.video && (probeDurOk || statsOk)), info: info, crashed: false };
+        }
+
         /* ---------------- file selection ---------------- */
 
         function extOf(name) {
@@ -773,7 +1129,19 @@
           return { video: video, audio: audio, duration: duration };
         }
 
-        function buildPlan(info, quality) {
+        // srcName/dstName default to the MEMFS names; conversion of a
+        // prepared (mounted / chunked / segment) input rebuilds the plan
+        // with the actual paths. The encoding settings themselves are
+        // identical for every caller.
+        function buildPlan(info, quality, srcName, dstName) {
+          var src = srcName || inputName;
+          var dst = dstName || 'output.mp4';
+          // Every output — single file or segmented part — is an
+          // ordinary faststart MP4 so it plays anywhere on its own.
+          // Parts are joined afterwards by merging their moov
+          // indexes in pure JS (see mergeMp4PartsBlobs below); the
+          // media data itself is never re-encoded or copied.
+          var movflags = '+faststart';
           var v = info.video, a = info.audio;
           var videoCopy = VIDEO_PLAYABLE.indexOf(v.codec) !== -1;
           // Copy mode keeps the old rule (alac audio may stay as-is).
@@ -782,18 +1150,18 @@
           var modeKey, modeLabel, detail;
           var audioCopy = audioCopyAny;
           if (videoCopy && audioCopyAny) {
-            args = ['-y', '-i', inputName, '-threads', '1', '-c', 'copy', '-movflags', '+faststart', 'output.mp4'];
+            args = ['-y', '-i', src, '-threads', '1', '-c', 'copy', '-movflags', movflags, dst];
             modeKey = 'copy'; modeLabel = 'ストリームコピー';
             detail = '映像・音声とも再エンコードせずそのままコピーします。<b>完全無劣化で最速</b>です。画質モードは使いません。';
           } else if (quality === 'lossless') {
-            args = ['-y', '-i', inputName, '-threads', '1'];
+            args = ['-y', '-i', src, '-threads', '1'];
             if (videoCopy) {
               args.push('-c:v', 'copy');
             } else {
               args.push('-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '0', '-pix_fmt', 'yuv420p', '-tag:v', 'avc1');
             }
             if (a) args.push('-c:a', audioCopyAny ? 'copy' : 'alac');
-            args.push('-movflags', '+faststart', 'output.mp4');
+            args.push('-movflags', movflags, dst);
             modeKey = 'lossless';
             modeLabel = videoCopy ? '音声のみロスレス変換(保管用)' : '完全無劣化変換(保管用)';
             detail = '映像: <b>' + (videoCopy ? 'コピー(無劣化)' : 'H.264 ロスレス変換(CRF 0)') + '</b>' +
@@ -804,7 +1172,7 @@
             // decoders accept it. veryfast (not ultrafast) keeps CABAC on, so
             // x264 actually signals High instead of Constrained Baseline.
             audioCopy = !a || AUDIO_COPY_PLAYABLE.indexOf(a.codec) !== -1;
-            args = ['-y', '-i', inputName, '-threads', '1'];
+            args = ['-y', '-i', src, '-threads', '1'];
             if (videoCopy) {
               args.push('-c:v', 'copy');
             } else {
@@ -814,7 +1182,7 @@
               if (audioCopy) args.push('-c:a', 'copy');
               else args.push('-c:a', 'aac', '-b:a', '320k');
             }
-            args.push('-movflags', '+faststart', 'output.mp4');
+            args.push('-movflags', movflags, dst);
             modeKey = 'playable';
             modeLabel = videoCopy ? '音声のみ変換(再生優先)' : '再生優先変換';
             detail = '映像: <b>' + (videoCopy ? 'コピー(無劣化)' : 'H.264 Highプロファイル変換(CRF 10、元素材と判別できない画質)') + '</b>' +
@@ -893,28 +1261,44 @@
           statusSub.textContent = '';
           progressPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 
+          // Probe reads ONLY a head slice (first 16MB) of the file. The
+          // codecs of an MPEG-PS stream are declared at its head, so this
+          // is enough to plan the conversion, and a large file can no
+          // longer exhaust memory at this stage. The whole file is not
+          // read here — that is deferred to conversion, and even then it
+          // is loaded lazily (mount / chunks), never all at once.
+          var probeName = 'probe.' + extOf(currentFile.name);
           loadFFmpeg(function (t, r) {
               statusText.textContent = t + (r != null && r < 1 ? ' ' + Math.round(r * 100) + '%' : '');
               if (r != null) barFill.style.width = (r * 100).toFixed(1) + '%';
             })
             .then(function () {
-              statusText.textContent = 'ファイルを読み込んでいます…(' + fmtSize(currentFile.size) + ')';
-              return fileToUint8Array(currentFile).then(function (data) {
-                return ffmpeg.writeFile(inputName, data);
+              checkCancelled();
+              statusText.textContent = 'ファイルの先頭だけを読み込んでいます…';
+              var head = currentFile.slice(0, Math.min(currentFile.size, HEAD_PROBE_BYTES));
+              return sliceToUint8Array(head).then(function (data) {
+                head = null;
+                return ffmpeg.writeFile(probeName, data).then(function () { data = null; });
               });
             })
             .then(function () {
+              checkCancelled();
               statusText.textContent = 'コーデックを判定しています…';
-              logBuffer = [];
-              return ffmpeg.exec(['-i', inputName]);
+              return probeAccessiblePath(probeName);
             })
-            .then(function () {
-              var text = (logBuffer || []).join('\n');
-              logBuffer = null;
-              var info = parseStreams(text);
+            .then(function (info) {
+              // Free the probe slice from the virtual FS right away.
+              return deleteFileSafe(probeName).then(function () { return info; });
+            })
+            .then(function (info) {
               if (!info.video) {
                 throw new Error('映像ストリームが見つかりませんでした。対応していないファイルの可能性があります。');
               }
+              // A head slice cannot measure the total duration of a
+              // large file (and may report a wrong one), so duration is
+              // kept only when the slice WAS the whole file. Planning
+              // and conversion never depend on it.
+              if (currentFile.size > HEAD_PROBE_BYTES) info.duration = null;
               probedInfo = info;
               plan = buildPlan(info, qualitySelect.value);
               renderPlan();
@@ -926,6 +1310,7 @@
             })
             .catch(function (err) {
               logBuffer = null;
+              deleteFileSafe(probeName);
               busy = false;
               probeBtn.disabled = false;
               probeBtn.textContent = '再試行する';
@@ -991,7 +1376,24 @@
           startTimer();
 
           var verifiedInfo = null;
-          ffmpeg.exec(plan.args)
+          // The input is loaded only now, at conversion start (the probe
+          // used just a head slice and left nothing in the virtual FS).
+          // Small files are written whole here; that is the one place a
+          // full read still happens, bounded by LARGE_THRESHOLD.
+          loadFFmpeg(function (t, r) {
+              statusText.textContent = t + (r != null && r < 1 ? ' ' + Math.round(r * 100) + '%' : '');
+            })
+            .then(function () {
+              checkCancelled();
+              statusText.textContent = 'ファイルを読み込んでいます…';
+              return prepareInput();
+            })
+            .then(function (prepared) {
+              checkCancelled();
+              plan = buildPlan(probedInfo, qualitySelect.value, prepared.path, 'output.mp4');
+              statusText.textContent = plan.modeKey === 'copy' ? 'コピーしています…' : '変換しています…';
+              return ffmpeg.exec(plan.args);
+            })
             .then(function (code) {
               if (cancelled) return undefined;
               if (code !== 0) throw new Error('FFmpeg がエラーで終了しました(コード ' + code + ')。メモリ不足の可能性があります。');
@@ -1014,12 +1416,12 @@
               resultBlob = new Blob([plainCopy], { type: 'video/mp4' });
               if (resultBlob.size === 0) throw new Error('出力ファイルが空でした。検証に失敗したため「成功」にはしませんでした。');
               // Free the virtual FS immediately so no memory carries over.
-              deleteFileSafe(inputName);
               deleteFileSafe('output.mp4');
+              cleanupPreparedInput();
               cleanupResult(true);
               resultURL = URL.createObjectURL(resultBlob);
               previewError.classList.add('hidden');
-              preview.src = resultURL;
+              setupResultPreview(resultBlob.size);
               downloadBtn.href = resultURL;
               downloadBtn.setAttribute('download', outputName);
               $('outName').textContent = outputName;
@@ -1027,7 +1429,10 @@
               $('outMode').textContent = plan.modeLabel;
               $('outVerify').textContent = '合格 — 映像 ' + verifiedInfo.video.codec + (verifiedInfo.video.profile ? ' (' + verifiedInfo.video.profile + ')' : '') + (verifiedInfo.video.res ? ' ' + verifiedInfo.video.res : '');
               $('outTime').textContent = fmtElapsed(Date.now() - startTime);
-              shareBtn.classList.remove('hidden');
+              // Size-based save layout: over 500MB the share
+              // button is not shown at all (it crashes iOS);
+              // download becomes the primary save path.
+              applySingleSaveLayout(resultBlob.size);
               barFill.style.width = '100%';
               statusText.textContent = '完了しました';
               progressPanel.classList.add('hidden');
@@ -1035,226 +1440,1328 @@
               resultPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
               busy = false;
               convertBtn.disabled = false;
-              // free the virtual FS for the next run
-              ffmpeg.deleteFile(inputName).catch(function () {});
-              ffmpeg.deleteFile('output.mp4').catch(function () {});
+              // Insurance: stash the result in OPFS so a crash
+              // at save time no longer loses it (best-effort,
+              // streamed, never blocks or fails the result).
+              saveBackupToOpfs();
             })
             .catch(function (err) {
               logBuffer = null;
               busy = false;
               convertBtn.disabled = false;
+              cleanupPreparedInput();
+              deleteFileSafe('output.mp4');
               progressPanel.classList.add('hidden');
               resultPanel.classList.add('hidden');
-              if (!cancelled) {
-                showError('変換に失敗しました。大きなファイルでは iPhone/iPad のメモリ上限(約2GB)に当たった可能性があります。\n' + (err && err.message ? err.message : err));
+              if (!cancelled && !(err && err.message === '__cancelled__')) {
+                showError('変換に失敗しました。\n' + (err && err.message ? err.message : err));
               }
             })
             .then(function () { stopTimer(); });
         });
 
         /* ---------------- segmented conversion (large files) ----------------
-           The input as a whole never coexists with a full-size output in
-           the WASM heap: split by stream copy first, drop the original,
-           then convert one small segment at a time with exactly the same
-           settings as the single-file path (plan.args, only the file
-           names differ). Each finished part is read out to a Blob and
-           both of its FS files are deleted, and the FFmpeg instance is
-           restarted per part so heap fragmentation resets. The parts are
-           delivered as separate playable MP4s and are never rejoined:
-           rejoining would load everything back into memory. */
+           The input file is never read as a whole. The engine is
+           started ONCE and the input is prepared ONCE (WORKERFS mount
+           — no copy at all — or 32MB chunk files read via the concat
+           protocol); both stay in place for the whole run. For each
+           part, in order: extract just that part with -ss/-t + stream
+           copy, convert it with exactly the same settings as the
+           single-file path, read it out to a Blob, and delete its FS
+           files so the freed space is reused by the next part. Only
+           one part ever exists in the virtual FS. The engine is
+           restarted ONLY when an instance is truly dead — an exec
+           promise rejected, or an exec returned with no log output
+           at all (an "Aborted()" line inside a log is an ordinary
+           failure in ffmpeg.wasm, NOT a crash, and never triggers
+           a restart); the failed part (not the whole run) is then
+           retried on the fresh instance, with its full extraction
+           fallback chain re-run so no combination is skipped. If neither lazy method works on this
+           device, the run stops with a short message — it never falls
+           back to a whole-file read. Part extraction itself runs a
+           fallback chain (see extractOnePart inside): input seek
+           first, output seek second, and — while no method has
+           succeeded yet — the other lazy input mode, because a
+           mounted / concatenated input cannot always seek and an
+           input-seek stream copy can then silently come back empty
+           instead of erroring. Each part is an ordinary faststart
+           MP4 that plays on its own. Afterwards the parts are
+           joined into ONE MP4 at any total size by merging their
+           moov indexes in pure JS (see mergeMp4PartsBlobs below):
+           only the indexes are read and rebuilt, the mdat bodies
+           are referenced as Blob slices, so joining a 1.6GB set
+           of parts uses only a few MB of memory and never touches
+           the engine's virtual FS. If joining fails, the parts
+           are delivered separately as before. */
 
-        function runSegmentedConvert() {
+        async function runSegmentedConvert() {
           hideError();
           busy = true; cancelled = false; segmenting = true;
           convertBtn.disabled = true;
           cleanupResult();
           cleanupParts();
+          extractMethod = null;
+          extractMap = null;
+          inputModeLock = null;
+          lastExtractLogTail = '';
           resultPanel.classList.add('hidden');
           progressPanel.classList.remove('hidden');
           progressTitle.textContent = '分割変換中…';
           barFill.style.width = '0%';
-          statusText.textContent = '分割しています…';
+          statusText.textContent = '準備中…';
           statusSub.textContent = isExtremeFile() ? 'このサイズはこの端末では変換できない可能性があります' : '';
           progressPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
           startTimer();
 
-          var originalExt = extOf(currentFile.name);
-          var segPattern = 'seg_%03d.' + originalExt;
-          var segInName = 'seg_input.' + originalExt;
+          // The extraction intermediate MUST be Matroska (.mkv), never
+          // the source extension: writing a .mpg intermediate selects
+          // the MPEG-PS muxer, which only accepts mp1/mp2/mp3/pcm_dvd/
+          // pcm_s16be/ac3/dts audio — any other audio codec (e.g. AAC)
+          // makes the header write fail with "Unsupported audio codec
+          // … Invalid argument" and the extraction aborts. Matroska
+          // accepts essentially any codec, and the segment is a stream
+          // copy, so it stays lossless either way. The conversion plan
+          // is decided by codec, not container, so the .mkv segment
+          // feeds the normal conversion unchanged.
+          var segInName = 'seg_input.mkv';
           var partOutName = 'part_output.mp4';
           var base = currentFile.name.replace(/\.[^.]+$/, '');
           var segTime = segmentTimeForSize(currentFile.size);
-          var segmentBlobs = [];
-          var totalParts = 0;
+          var totalParts = 0;      // 0 = unknown until a full probe succeeds
+          var probedFull = false;
 
-          function pad3(n) { return ('00' + n).slice(-3); }
+          // Extraction fallback chain for one part. Method A (input
+          // seek, the original method) is tried first, then method B
+          // (output seek). Inside each seek method, the map
+          // strategies M1 (all streams) → M2 (video + all audio) →
+          // M3 (first video + first audio) are tried in order: a
+          // stream the Matroska muxer cannot store fails the header
+          // write instantly, so falling through to the next strategy
+          // on the same part costs almost nothing, and dropping
+          // subtitle/data streams loses nothing the final MP4 could
+          // have carried. While no seek-method / map / input-mode
+          // combination has succeeded yet, a full failure also
+          // switches the lazy input mode (WORKERFS ⇄ chunked concat)
+          // and retries there. The first combination that succeeds
+          // is locked in and reused for every later part — detection
+          // is not repeated per part. Returns the prepared input on
+          // success, or null when every combination came back empty;
+          // that, and only that, is the end-of-file signal, so a
+          // duration estimate that disagrees with the real file
+          // length can never truncate the output early.
+          //
+          // True-crash handling: tryExtractOnce reports crashed:true
+          // ONLY for a dead instance (exec promise rejected, or no
+          // log output at all) — never for an ordinary failure whose
+          // log happens to end with "Aborted()". When a true crash
+          // does happen, this function does NOT abandon the chain:
+          // it restarts the engine and runs this part's FULL
+          // fallback chain again on the fresh instance (every seek
+          // method × map strategy × input mode, from the start),
+          // so combinations not yet tried (M2/M3, method B, the
+          // other input mode) are never skipped. Only when the
+          // full chain has also been run on fresh instances and
+          // crashes keep happening (2 restarts) does it signal
+          // __engine_crashed__ to the part loop.
+          async function extractOnePart(partIndex, startSec, outName) {
+            var methods = extractMethod ? [extractMethod, extractMethod === 'A' ? 'B' : 'A'] : ['A', 'B'];
+            var maps = extractMap ? [extractMap, 'M1', 'M2', 'M3'].filter(function (v, i, a) { return a.indexOf(v) === i; }) : ['M1', 'M2', 'M3'];
+            var modes = inputModeLock ? [inputModeLock] : ['workerfs', 'chunk'];
+            for (var crashPass = 0; ; crashPass++) {
+              var anyPrepared = false;
+              var crashedDuringPass = false;
+              for (var mi = 0; mi < modes.length; mi++) {
+                if (crashedDuringPass) break;
+                var prepared;
+                // Reuse the input prepared for earlier parts: the
+                // WORKERFS mount / chunk files stay in place for the
+                // whole run and are NOT re-prepared per part. (After
+                // a crash restart preparedInput is null, so the input
+                // is re-prepared on the fresh instance.)
+                if (preparedInput && preparedInput.mode === modes[mi]) {
+                  prepared = preparedInput;
+                } else {
+                  try {
+                    prepared = await prepareInput(modes[mi]);
+                  } catch (e) {
+                    if (cancelled) throw e;
+                    continue; // this input mode is unusable on this device; try the other
+                  }
+                }
+                anyPrepared = true;
+                checkCancelled();
 
-          // (a) Stream-copy split into small segments (lossless, low memory).
-          var splitArgs = ['-y', '-i', inputName, '-threads', '1', '-c', 'copy',
-                           '-f', 'segment', '-segment_time', String(segTime),
-                           '-reset_timestamps', '1', segPattern];
-          ffmpeg.exec(splitArgs)
-            .then(function (code) {
-              checkCancelled();
-              if (code !== 0) throw new Error('分割に失敗しました(コード ' + code + ')。メモリ不足の可能性があります。');
-              // (b) Free the original input before anything else.
-              return deleteFileSafe(inputName);
-            })
-            .then(function () {
-              checkCancelled();
-              statusText.textContent = 'セグメントを取り出しています…';
-              if (ffmpeg.listDir) {
-                return ffmpeg.listDir('/').then(function (entries) {
-                  var names = [];
-                  (entries || []).forEach(function (en) {
-                    var nm = typeof en === 'string' ? en : (en && en.name);
-                    if (nm && /^seg_\d+\./.test(nm)) names.push(nm);
-                  });
-                  names.sort();
-                  return names;
-                }).catch(function () { return null; });
+                // Once per run, measure the duration through the
+                // prepared input (a mount / concat probe reads no bytes
+                // into JS) to size the parts by bitrate and count them.
+                // If it cannot be measured, the loop simply runs until
+                // an extraction comes back empty — planning never
+                // depends on the duration.
+                if (!probedFull) {
+                  probedFull = true;
+                  try {
+                    var fullInfo = await probeAccessiblePath(prepared.path, (prepared.mode === 'chunk') ? ['-protocol_whitelist', 'file,concat'] : null);
+                    checkCancelled();
+                    if (fullInfo && isFinite(fullInfo.duration) && fullInfo.duration > 0) {
+                      var bytesPerSec = currentFile.size / fullInfo.duration;
+                      if (bytesPerSec > 0) {
+                        var targetSec = Math.floor((64 * 1024 * 1024) / bytesPerSec);
+                        segTime = Math.max(30, Math.min(300, targetSec));
+                      }
+                      totalParts = Math.max(1, Math.ceil(fullInfo.duration / segTime));
+                      segState = { index: partIndex, count: (totalParts > partIndex) ? totalParts : 0 };
+                    }
+                  } catch (e) {
+                    if (cancelled) throw e;
+                    // Duration stays unknown; extraction decides the end.
+                  }
+                }
+
+                for (var si = 0; si < methods.length; si++) {
+                  if (crashedDuringPass) break;
+                  for (var ki = 0; ki < maps.length; ki++) {
+                    if (mi > 0 || si > 0 || ki > 0 || crashPass > 0) {
+                      statusText.textContent = 'パート ' + (partIndex + 1) + ' の取り出しを別の方式で再試行しています…';
+                    }
+                    var attempt = await tryExtractOnce(prepared, methods[si], maps[ki], startSec, segTime, outName);
+                    checkCancelled();
+                    if (attempt.crashed) {
+                      // Truly dead instance (see tryExtractOnce):
+                      // stop this pass — running more combos on a
+                      // corpse is pointless — but do NOT throw away
+                      // the untried combos. The crashPass loop below
+                      // restarts the engine and re-runs the whole
+                      // chain, including everything not yet tried.
+                      crashedDuringPass = true;
+                      break;
+                    }
+                    if (attempt.ok) {
+                      extractMethod = methods[si];
+                      extractMap = maps[ki];
+                      inputModeLock = modes[mi];
+                      return prepared;
+                    }
+                    await deleteFileSafe(outName);
+                  }
+                }
+                if (crashedDuringPass) break;
+                // Both seek methods failed on this input mode: release
+                // it and fall through to the other input mode.
+                await cleanupPreparedInput();
               }
+              if (crashedDuringPass) {
+                if (crashPass < 2) {
+                  await restartEngineAfterCrash();
+                  checkCancelled();
+                  continue; // full fallback chain again on the fresh engine
+                }
+                throw new Error('__engine_crashed__');
+              }
+              if (!anyPrepared) throw new Error('この端末では大きいファイルを読み込めません');
               return null;
-            })
-            .then(function (names) {
+            }
+          }
+
+          // Restart helper for the TRUE crash path only (exec
+          // promise rejected / no log at all — see tryExtractOnce):
+          // the instance is unusable, so terminate it, load a fresh
+          // one (the startup progress shows only here and on the
+          // very first load), and drop the prepared-input handle
+          // — the mount / chunk files died with the old worker, so
+          // the retried part re-prepares the input on the new
+          // instance (extraction locks are kept, so it goes straight
+          // back to the combination that was working). Ordinary
+          // failures never reach this helper: their logs may end
+          // with "Aborted()" and they are handled by the fallback
+          // chain on the same instance instead.
+          async function restartEngineAfterCrash() {
+            preparedInput = null;
+            logBuffer = null;
+            engineCrashDetected = false;
+            statusText.textContent = '変換エンジンが異常終了したため再起動しています…';
+            await restartFFmpeg();
+          }
+          // Only the explicit sentinel counts as a crash at this
+          // level. Matching "abort"/"runtimeerror" substrings in an
+          // arbitrary error message would re-introduce the old bug:
+          // ordinary FFmpeg failures carry "Aborted()" in their
+          // log/message and must go through the normal failure path,
+          // not the restart path.
+          function isCrashError(e) {
+            var s = String(e && e.message || e || '');
+            return s === '__engine_crashed__';
+          }
+
+          try {
+            // Load the engine ONCE, before the first part. Every part
+            // below runs on this same instance.
+            if (!loaded) {
+              await loadFFmpeg(function (t, r) {
+                statusText.textContent = t + (r != null && r < 1 ? ' ' + Math.round(r * 100) + '%' : '');
+              });
+            }
+            checkCancelled();
+
+            for (var partIndex = 0; ; partIndex++) {
               checkCancelled();
-              if (names && names.length) {
-                // Extract every segment to a JS-side Blob, deleting each
-                // FS file as soon as it is out.
-                var chain = Promise.resolve();
-                names.forEach(function (nm) {
-                  chain = chain.then(function () {
-                    checkCancelled();
-                    return readFileToBlob(nm, '').then(function (b) {
-                      segmentBlobs.push(b);
-                      return deleteFileSafe(nm);
-                    });
+              // Note: totalParts (when known) is only a progress hint.
+              // The loop always ends on an empty extraction, so a
+              // mis-measured duration can never truncate the output.
+
+              // One part, retried in place (same partIndex) only when
+              // the engine crashed mid-exec; a normal failure or the
+              // end-of-file signal leaves this inner loop immediately.
+              var partFinished = false;
+              var reachedEOF = false;
+              var crashRetries = 0;
+              while (!partFinished) {
+                try {
+                  segState = { index: partIndex, count: (totalParts > partIndex) ? totalParts : 0 };
+                  statusText.textContent = 'パート ' + (partIndex + 1) + ((totalParts > partIndex) ? ' / ' + totalParts : '') + ' を取り出しています…';
+                  statusSub.textContent = '';
+
+                  // Extract ONE part by stream copy, through the fallback
+                  // chain (input seek → output seek → other input mode).
+                  // null means both seek methods came back empty, which —
+                  // and only which — is treated as the end of the file.
+                  var startSec = partIndex * segTime;
+                  var extracted = await extractOnePart(partIndex, startSec, segInName);
+                  checkCancelled();
+                  if (!extracted) {
+                    await deleteFileSafe(segInName);
+                    await cleanupPreparedInput();
+                    if (partIndex === 0) {
+                      throw new Error('パートを取り出せませんでした。\n--- 抽出時のFFmpegログ(末尾) ---\n' + (lastExtractLogTail || '(ログが取得できませんでした)'));
+                    }
+                    reachedEOF = true;
+                    partFinished = true;
+                    break; // end of file: normal completion
+                  }
+
+                  // Convert this part with the standard settings, rebuilt
+                  // for the segment file names.
+                  plan = buildPlan(probedInfo, qualitySelect.value, segInName, partOutName);
+                  statusText.textContent = 'パート ' + (partIndex + 1) + ((totalParts > partIndex) ? ' / ' + totalParts : '') + ' を変換中…';
+                  var convCode;
+                  var convThrew = false;
+                  logBuffer = [];
+                  try {
+                    convCode = await ffmpeg.exec(plan.args);
+                  } catch (convErr) {
+                    if (cancelled) throw convErr;
+                    // Same rule as extraction: the exec promise
+                    // itself rejecting means the worker is gone —
+                    // a true crash, whatever the message says.
+                    convThrew = true;
+                    convCode = -1;
+                  }
+                  var convLog = (logBuffer || []).join('\n');
+                  logBuffer = null;
+                  checkCancelled();
+                  if (convThrew) throw new Error('__engine_crashed__');
+                  if (!convLog.trim()) {
+                    // No log at all from an exec that returned:
+                    // ffmpeg always logs, so this is a dead
+                    // instance, not an ordinary failure.
+                    throw new Error('__engine_crashed__');
+                  }
+                  // NOTE: "Aborted(" in convLog is NOT a crash here
+                  // either — ffmpeg.wasm ends ordinary conversion
+                  // failures with it too. A non-zero code with a
+                  // log is an ordinary failure of this part.
+                  if (convCode !== 0) throw new Error('パート ' + (partIndex + 1) + ' の変換に失敗しました(コード ' + convCode + ')。メモリ不足の可能性があります。');
+                  var verified = await verifyOutputFile(partOutName);
+                  checkCancelled();
+                  var blob = await readFileToBlob(partOutName, 'video/mp4');
+                  if (blob.size === 0) throw new Error('パート ' + (partIndex + 1) + ' の出力が空でした。');
+                  resultParts.push({
+                    name: base + '_part' + (partIndex + 1) + '.mp4',
+                    blob: blob,
+                    url: null,
+                    duration: (verified && isFinite(verified.duration) && verified.duration > 0) ? verified.duration : segTime,
+                    verify: '合格 — 映像 ' + verified.video.codec + (verified.video.profile ? ' (' + verified.video.profile + ')' : '') + (verified.video.res ? ' ' + verified.video.res : '')
                   });
-                });
-                return chain;
-              }
-              // Fallback when listDir is unavailable: probe seg_000, 001, …
-              function probeNext(i) {
-                checkCancelled();
-                var nm = 'seg_' + pad3(i) + '.' + originalExt;
-                return readFileToBlob(nm, '').then(function (b) {
-                  segmentBlobs.push(b);
-                  return deleteFileSafe(nm).then(function () { return probeNext(i + 1); });
-                }, function () { return null; });
-              }
-              return probeNext(0);
-            })
-            .then(function () {
-              checkCancelled();
-              if (!segmentBlobs.length) throw new Error('分割したセグメントが見つかりませんでした。');
-              totalParts = segmentBlobs.length;
-              // Clean heap before converting: the split phase held the
-              // input and all segments in MEMFS at once.
-              return restartFFmpeg();
-            })
-            .then(function () {
-              // (c)-(e) Convert one segment at a time.
-              function nextPart(i) {
-                if (i >= totalParts) return Promise.resolve();
-                checkCancelled();
-                segState = { index: i, count: totalParts };
-                statusText.textContent = 'パート ' + (i + 1) + ' / ' + totalParts + ' を変換中…';
-                statusSub.textContent = '';
-                barFill.style.width = ((i / totalParts) * 100).toFixed(1) + '%';
-                var partArgs = plan.args.map(function (a) {
-                  if (a === inputName) return segInName;
-                  if (a === 'output.mp4') return partOutName;
-                  return a;
-                });
-                var segBlob = segmentBlobs[i];
-                segmentBlobs[i] = null; // release our reference once written in
-                return blobToUint8Array(segBlob)
-                  .then(function (bytes) {
-                    checkCancelled();
-                    return ffmpeg.writeFile(segInName, bytes);
-                  })
-                  .then(function () {
-                    checkCancelled();
-                    return ffmpeg.exec(partArgs);
-                  })
-                  .then(function (code) {
-                    checkCancelled();
-                    if (code !== 0) throw new Error('パート ' + (i + 1) + ' の変換に失敗しました(コード ' + code + ')。メモリ不足の可能性があります。');
-                    return verifyOutputFile(partOutName);
-                  })
-                  .then(function (info) {
-                    checkCancelled();
-                    // (d) Read the finished part out, then delete both FS files.
-                    return readFileToBlob(partOutName, 'video/mp4').then(function (blob) {
-                      if (blob.size === 0) throw new Error('パート ' + (i + 1) + ' の出力が空でした。');
-                      resultParts.push({
-                        name: base + '_part' + (i + 1) + '.mp4',
-                        blob: blob,
-                        url: null,
-                        verify: '合格 — 映像 ' + info.video.codec + (info.video.profile ? ' (' + info.video.profile + ')' : '') + (info.video.res ? ' ' + info.video.res : '')
-                      });
-                      return deleteFileSafe(segInName).then(function () { return deleteFileSafe(partOutName); });
-                    });
-                  })
-                  .then(function () {
+
+                  // Free this part's FS files so their space is reused
+                  // by the next part. The engine instance and the
+                  // prepared input (WORKERFS mount / chunk files) are
+                  // kept as-is for the next part — no restart, no
+                  // re-mount, no re-load between parts.
+                  await deleteFileSafe(segInName);
+                  await deleteFileSafe(partOutName);
+                  segState = null;
+                  partFinished = true;
+                } catch (partErr) {
+                  if (cancelled || (partErr && partErr.message === '__cancelled__')) throw partErr;
+                  if (isCrashError(partErr) && crashRetries < 2) {
+                    crashRetries++;
                     segState = null;
-                    if (cancelled) throw new Error('__cancelled__');
-                    // (e) Restart per part to reset heap fragmentation.
-                    if (i + 1 < totalParts) return restartFFmpeg();
-                    // Last part: shut the engine down to free the heap.
-                    try { if (ffmpeg) ffmpeg.terminate(); } catch (e) {}
-                    ffmpeg = null; loaded = false;
-                    return null;
-                  })
-                  .then(function () { return nextPart(i + 1); });
+                    await restartEngineAfterCrash();
+                    checkCancelled();
+                    continue; // retry the SAME part on the fresh instance
+                  }
+                  throw partErr;
+                }
               }
-              return nextPart(0);
-            })
-            .then(function () {
-              if (cancelled) return;
-              segState = null; segmenting = false;
-              busy = false;
-              convertBtn.disabled = false;
-              barFill.style.width = '100%';
-              progressPanel.classList.add('hidden');
-              renderPartsResult(totalParts);
-              resultPanel.classList.remove('hidden');
-              resultPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-            })
-            .catch(function (err) {
-              segState = null; segmenting = false;
-              logBuffer = null;
-              busy = false;
-              convertBtn.disabled = false;
-              progressPanel.classList.add('hidden');
-              resultPanel.classList.add('hidden');
-              if (!cancelled && !(err && err.message === '__cancelled__')) {
-                showError('分割変換に失敗しました。パート ' + resultParts.length + ' までは完了していますが、この画面からは保存できません。\n' + (err && err.message ? err.message : err));
-                if (resultParts.length) renderPartsResult(totalParts || resultParts.length), resultPanel.classList.remove('hidden');
+              if (reachedEOF) break;
+            }
+
+            if (cancelled) return;
+            if (!resultParts.length) throw new Error('変換できるパートがありませんでした。');
+            segState = null;
+            // Join the parts into ONE MP4 by merging their moov
+            // indexes in pure JS (mergeMp4PartsBlobs). Only the
+            // indexes are read and rebuilt; the mdat bodies are
+            // referenced as Blob slices, so the total size does
+            // not matter — a 1.6GB set of parts joins with a few
+            // MB of memory and nothing passes through the engine.
+            // Any failure (unexpected structure, stsd mismatch,
+            // verification mismatch) falls back to the per-part
+            // result with a one-line reason; converted parts are
+            // never lost.
+            var joined = false;
+            var joinNote = '';
+            joining = true;
+            try {
+              statusText.textContent = '索引を結合しています…';
+              statusSub.textContent = '';
+              barFill.style.width = '0%';
+              var joinRes = await joinPartsByMoovMerge(resultParts);
+              checkCancelled();
+              if (joinRes && joinRes.blob && joinRes.blob.size > 0) {
+                cleanupResult(false);
+                resultBlob = joinRes.blob;
+                resultURL = URL.createObjectURL(resultBlob);
+                previewError.classList.add('hidden');
+                // Preview: auto-load ONLY up to 1GB. Above that,
+                // the <video> element is not touched at all here —
+                // the result screen must come up (and saving must
+                // work) even if Safari cannot preview a GB-scale
+                // Blob. The user can load it on demand via the
+                // preview button (see setupResultPreview).
+                setupResultPreview(resultBlob.size);
+                // Save path by size: the download anchor points
+                // at the Blob's object URL, so the browser
+                // streams the Blob to disk — nothing is read
+                // into memory to save it. Over SHARE_LIMIT
+                // (500MB) the share button is NOT shown at all:
+                // handing a GB-scale File to the iOS share
+                // sheet is what crashed the page after a
+                // successful join, so that path is removed for
+                // large results and download is primary. At or
+                // below the limit, share stays primary.
+                downloadBtn.href = resultURL;
+                downloadBtn.setAttribute('download', outputName);
+                applySingleSaveLayout(resultBlob.size);
+                $('outName').textContent = outputName;
+                $('outSize').textContent = fmtSize(resultBlob.size);
+                $('outMode').textContent = plan.modeLabel;
+                $('outVerify').textContent = '合格(索引の構造検証) — ' + resultParts.length + 'パートを連結 / 長さ ' + fmtDuration(joinRes.duration);
+                $('outTime').textContent = fmtElapsed(Date.now() - startTime);
+                singleResult.classList.remove('hidden');
+                joined = true;
+              } else {
+                joinNote = '連結できませんでした（' + (lastJoinReason || '結合した索引の検証に失敗しました') + '）。パート別に表示します。';
               }
-            })
-            .then(function () { stopTimer(); });
+            } catch (joinErr) {
+              if (cancelled || (joinErr && joinErr.message === '__cancelled__')) throw joinErr;
+              joined = false;
+              joinNote = '連結できませんでした（' + (joinErr && joinErr.message ? joinErr.message : '結合した索引の検証に失敗しました') + '）。パート別に表示します。';
+            } finally {
+              joining = false;
+            }
+            segmenting = false;
+            busy = false;
+            convertBtn.disabled = false;
+            barFill.style.width = '100%';
+            progressPanel.classList.add('hidden');
+            renderPartsResult(resultParts.length, joined, joinNote);
+            resultPanel.classList.remove('hidden');
+            resultPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            // Insurance: stash the parts in OPFS (streamed,
+            // best-effort) so even if saving the joined file
+            // crashes the page, the conversion survives and
+            // can be restored — and re-joined — next open.
+            saveBackupToOpfs();
+          } catch (err) {
+            segState = null; segmenting = false;
+            logBuffer = null;
+            // Release any prepared input and shut the engine down.
+            try { await cleanupPreparedInput(); } catch (e) {}
+            try { if (ffmpeg) ffmpeg.terminate(); } catch (e) {}
+            ffmpeg = null; loaded = false;
+            busy = false;
+            convertBtn.disabled = false;
+            progressPanel.classList.add('hidden');
+            resultPanel.classList.add('hidden');
+            if (!cancelled && !(err && err.message === '__cancelled__')) {
+              if (err && err.message === 'この端末では大きいファイルを読み込めません') {
+                showError('この端末では大きいファイルを読み込めません');
+              } else if (resultParts.length) {
+                showError('分割変換に失敗しました。パート ' + resultParts.length + ' までは完了しています。\n' + (err && err.message ? err.message : err));
+                renderPartsResult(resultParts.length);
+                resultPanel.classList.remove('hidden');
+                saveBackupToOpfs();
+              } else {
+                showError('分割変換に失敗しました。\n' + (err && err.message ? err.message : err));
+              }
+            }
+          } finally {
+            stopTimer();
+          }
         }
 
-        // (f) Each part is a standalone playable MP4 with its own
-        // share / download controls. They are never rejoined.
-        function renderPartsResult(count) {
-          singleResult.classList.add('hidden');
-          partsResult.classList.remove('hidden');
+        /* ---------------- join parts into ONE mp4 ----------------
+           Joining merges only the parts' moov indexes, in pure
+           JS — FFmpeg is not involved, so the joined file never
+           passes through the engine's memory and there is NO
+           total-size limit (the previous concat-demuxer join had
+           to give up above 1GB for exactly that reason). Each
+           part's top-level boxes are scanned and only its moov
+           is read; a new moov is built with summed durations,
+           concatenated sample tables (stts/ctts/stss/stsz),
+           chunk counts re-based in stsc, and chunk offsets
+           rewritten as co64 pointing into the concatenated mdat
+           bodies. The result is [ftyp][merged moov][one mdat
+           header][part 1 mdat body][part 2 mdat body]… assembled
+           as a single Blob whose mdat pieces are slice
+           references — the media bytes are never copied into
+           memory, so memory use stays at the index size (a few
+           MB at most) no matter how large the total is. The
+           ONLY success gate is structural: the merged moov is
+           verified by re-parsing it (sample counts, stts sums
+           and chunk counts must match the parts exactly). There
+           is deliberately NO <video>-element metadata check and
+           NO duration/size/part-count gate — for a GB-scale
+           Blob, Safari can fail or stall the metadata load
+           itself, which previously turned a structurally sound
+           join into a false "cannot join". Any unexpected structure (an stsd that differs
+           between parts beyond per-file bitrate statistics,
+           unparseable boxes, a failed check) aborts the join
+           and the caller keeps the per-part result — the part
+           Blobs are never touched, so a failed join loses
+           nothing. */
+
+/* MP4_MERGE_BEGIN */
+        // Pure-JS MP4 join by merging only the moov index boxes.
+        // The media data (mdat bodies) is never read into memory:
+        // the merged file is a single Blob assembled from the
+        // parts' ftyp, the newly built moov, one mdat header, and
+        // Blob.slice references to each part's mdat body. Memory
+        // use is therefore proportional to the index size (a few
+        // MB at most), independent of the total file size, so
+        // there is no total-size limit on joining. These functions
+        // use only Blob / Uint8Array / DataView so they can be
+        // exercised outside the page as well.
+        function mp4View(b) { return new DataView(b.buffer, b.byteOffset, b.byteLength); }
+        function mp4U32(b, o) { return mp4View(b).getUint32(o, false); }
+        function mp4U64(b, o) { return Number(mp4View(b).getBigUint64(o, false)); }
+        function mp4SetU32(b, o, v) { mp4View(b).setUint32(o, v >>> 0, false); }
+        function mp4SetU64(b, o, v) { mp4View(b).setBigUint64(o, BigInt(Math.round(v)), false); }
+        function mp4TypeAt(b, o) { return String.fromCharCode(b[o], b[o + 1], b[o + 2], b[o + 3]); }
+        function mp4WriteType(b, o, t) { for (var i = 0; i < 4; i++) b[o + i] = t.charCodeAt(i); }
+
+        // Parse the box list inside buf[start, end). Throws on any
+        // malformed box — callers treat that as "cannot join".
+        function mp4ParseBoxes(buf, start, end) {
+          var boxes = [];
+          var off = start;
+          while (off + 8 <= end) {
+            var size32 = mp4U32(buf, off);
+            var type = mp4TypeAt(buf, off + 4);
+            var header = 8, size;
+            if (size32 === 1) {
+              if (off + 16 > end) throw new Error('ボックスヘッダが不正です(' + type + ')');
+              size = mp4U64(buf, off + 8);
+              header = 16;
+            } else if (size32 === 0) {
+              size = end - off;
+            } else {
+              size = size32;
+            }
+            if (size < header || off + size > end) throw new Error('ボックスサイズが不正です(' + type + ')');
+            boxes.push({ type: type, start: off, size: size, headerSize: header, dataStart: off + header, dataEnd: off + size });
+            off += size;
+          }
+          if (off !== end) throw new Error('ボックスの終端が一致しません');
+          return boxes;
+        }
+        function mp4FindBox(boxes, type) {
+          for (var i = 0; i < boxes.length; i++) if (boxes[i].type === type) return boxes[i];
+          return null;
+        }
+        function mp4FindBoxes(boxes, type) {
+          return boxes.filter(function (b) { return b.type === type; });
+        }
+        function mp4CloneBox(buf, box) {
+          return new Uint8Array(buf.subarray(box.start, box.dataEnd));
+        }
+        function mp4BytesEqual(a, b) {
+          if (a.length !== b.length) return false;
+          for (var i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+          return true;
+        }
+        // stsd comparison form. Two sample entries describe the
+        // same codec setup only if every configuration byte
+        // matches — but ffmpeg's muxer also stamps PER-FILE
+        // bitrate statistics into stsd: the btrt box (max/avg
+        // bitrate of that one file) and the max/avg bitrate
+        // fields of the DecoderConfigDescriptor inside esds.
+        // Those values legitimately differ between parts of the
+        // same source (each part has its own bitrate stats), so
+        // a naive byte comparison would reject every real join.
+        // This returns a copy with ONLY those statistic fields
+        // zeroed; codec configuration (avcC/hvcC, the esds
+        // DecoderSpecificInfo, dimensions, sample rate, …) is
+        // still compared byte for byte.
+        function mp4MaskEsdsBitrates(buf, start, end) {
+          var off = start;
+          while (off + 2 <= end) {
+            var tag = buf[off];
+            var pos = off + 1, len = 0, b;
+            do { b = buf[pos++]; len = (len << 7) | (b & 0x7f); } while ((b & 0x80) && pos < end);
+            var contentStart = pos, contentEnd = pos + len;
+            if (contentEnd > end) return;
+            if (tag === 0x04) {
+              // DecoderConfigDescriptor: objectType(1) +
+              // streamType(1) + bufferSizeDB(3), then
+              // maxBitrate(4) + avgBitrate(4) — statistics.
+              for (var i = contentStart + 5; i < contentStart + 13 && i < contentEnd; i++) buf[i] = 0;
+            } else if (tag === 0x03) {
+              var inner = contentStart + 3; // ES_ID(2) + flags(1)
+              var flags = buf[contentStart + 2];
+              if (flags & 0x80) inner += 2;
+              if (flags & 0x40) inner += 1 + buf[inner];
+              if (flags & 0x20) inner += 2;
+              mp4MaskEsdsBitrates(buf, inner, contentEnd);
+            }
+            off = contentEnd;
+          }
+        }
+        var MP4_VIDEO_ENTRIES = ['avc1', 'avc3', 'hvc1', 'hev1', 'mp4v', 'encv', 'vp09', 'vp08', 'av01', 'mjpg', 'jpeg'];
+        var MP4_AUDIO_ENTRIES = ['mp4a', 'enca', 'ac-3', 'ec-3', 'Opus', 'dOps', 'alac', 'mp3 ', '.mp3', 'samr', 'sawb'];
+        function mp4StsdComparable(raw) {
+          var copy = new Uint8Array(raw);
+          var header = (mp4U32(copy, 0) === 1) ? 16 : 8;
+          var count = mp4U32(copy, header + 4);
+          var p = header + 8;
+          for (var e = 0; e < count; e++) {
+            if (p + 8 > copy.length) break;
+            var eSize = mp4U32(copy, p);
+            var eType = mp4TypeAt(copy, p + 4);
+            if (eSize < 8 || p + eSize > copy.length) break;
+            var childOff = 0;
+            if (MP4_VIDEO_ENTRIES.indexOf(eType) !== -1) childOff = 86;
+            else if (MP4_AUDIO_ENTRIES.indexOf(eType) !== -1) childOff = 36;
+            if (childOff) {
+              try {
+                var kids = mp4ParseBoxes(copy, p + childOff, p + eSize);
+                kids.forEach(function (kid) {
+                  var i;
+                  if (kid.type === 'btrt') {
+                    for (i = kid.dataStart; i < kid.dataEnd; i++) copy[i] = 0;
+                  } else if (kid.type === 'esds') {
+                    mp4MaskEsdsBitrates(copy, kid.dataStart + 4, kid.dataEnd);
+                  }
+                });
+              } catch (err) { /* unparseable children: compare raw */ }
+            }
+            p += eSize;
+          }
+          return copy;
+        }
+        function mp4MakeBox(type, payload) {
+          var out = new Uint8Array(8 + payload.length);
+          mp4SetU32(out, 0, out.length);
+          mp4WriteType(out, 4, type);
+          out.set(payload, 8);
+          return out;
+        }
+        function mp4ConcatBytes(list) {
+          var total = 0, i;
+          for (i = 0; i < list.length; i++) total += list[i].length;
+          var out = new Uint8Array(total), off = 0;
+          for (i = 0; i < list.length; i++) { out.set(list[i], off); off += list[i].length; }
+          return out;
+        }
+
+        // --- sample-table parsers (payload = box content) ---
+        function mp4ParseStts(buf, box) {
+          var p = box.dataStart;
+          var count = mp4U32(buf, p + 4);
+          var entries = [];
+          for (var i = 0; i < count; i++) entries.push([mp4U32(buf, p + 8 + i * 8), mp4U32(buf, p + 12 + i * 8)]);
+          return { vf: new Uint8Array(buf.subarray(p, p + 4)), entries: entries };
+        }
+        function mp4ParseCtts(buf, box) {
+          var p = box.dataStart;
+          var count = mp4U32(buf, p + 4);
+          var entries = [];
+          for (var i = 0; i < count; i++) entries.push([mp4U32(buf, p + 8 + i * 8), mp4U32(buf, p + 12 + i * 8)]);
+          return { vf: new Uint8Array(buf.subarray(p, p + 4)), entries: entries };
+        }
+        function mp4ParseStss(buf, box) {
+          var p = box.dataStart;
+          var count = mp4U32(buf, p + 4);
+          var entries = [];
+          for (var i = 0; i < count; i++) entries.push(mp4U32(buf, p + 8 + i * 4));
+          return { vf: new Uint8Array(buf.subarray(p, p + 4)), entries: entries };
+        }
+        function mp4ParseStsc(buf, box) {
+          var p = box.dataStart;
+          var count = mp4U32(buf, p + 4);
+          var entries = [];
+          for (var i = 0; i < count; i++) {
+            var o = p + 8 + i * 12;
+            entries.push([mp4U32(buf, o), mp4U32(buf, o + 4), mp4U32(buf, o + 8)]);
+          }
+          return { vf: new Uint8Array(buf.subarray(p, p + 4)), entries: entries };
+        }
+        function mp4ParseStsz(buf, box) {
+          var p = box.dataStart;
+          var sampleSize = mp4U32(buf, p + 4);
+          var sampleCount = mp4U32(buf, p + 8);
+          var entries = null;
+          if (sampleSize === 0) {
+            entries = [];
+            for (var i = 0; i < sampleCount; i++) entries.push(mp4U32(buf, p + 12 + i * 4));
+          }
+          return { vf: new Uint8Array(buf.subarray(p, p + 4)), sampleSize: sampleSize, sampleCount: sampleCount, entries: entries };
+        }
+        function mp4ParseChunkOffsets(buf, box) {
+          var p = box.dataStart;
+          var count = mp4U32(buf, p + 4);
+          var entries = [];
+          var i;
+          if (box.type === 'co64') {
+            for (i = 0; i < count; i++) entries.push(mp4U64(buf, p + 8 + i * 8));
+          } else {
+            for (i = 0; i < count; i++) entries.push(mp4U32(buf, p + 8 + i * 4));
+          }
+          return { vf: new Uint8Array(buf.subarray(p, p + 4)), entries: entries };
+        }
+        function mp4EntriesTotalCount(entries) {
+          var n = 0;
+          for (var i = 0; i < entries.length; i++) n += entries[i][0];
+          return n;
+        }
+        function mp4EntriesTotalDuration(entries) {
+          var n = 0;
+          for (var i = 0; i < entries.length; i++) n += entries[i][0] * entries[i][1];
+          return n;
+        }
+        // Append run-length entries, fusing a boundary run that
+        // continues with the same value.
+        function mp4AppendRuns(dst, src) {
+          for (var i = 0; i < src.length; i++) {
+            var last = dst[dst.length - 1];
+            if (last && last[1] === src[i][1]) last[0] += src[i][0];
+            else dst.push([src[i][0], src[i][1]]);
+          }
+        }
+
+        // --- sample-table builders ---
+        function mp4BuildRunTable(type, vf, entries) {
+          var payload = new Uint8Array(8 + entries.length * 8);
+          payload.set(vf, 0);
+          mp4SetU32(payload, 4, entries.length);
+          for (var i = 0; i < entries.length; i++) {
+            mp4SetU32(payload, 8 + i * 8, entries[i][0]);
+            mp4SetU32(payload, 12 + i * 8, entries[i][1]);
+          }
+          return mp4MakeBox(type, payload);
+        }
+        function mp4BuildStss(vf, entries) {
+          var payload = new Uint8Array(8 + entries.length * 4);
+          payload.set(vf, 0);
+          mp4SetU32(payload, 4, entries.length);
+          for (var i = 0; i < entries.length; i++) mp4SetU32(payload, 8 + i * 4, entries[i]);
+          return mp4MakeBox('stss', payload);
+        }
+        function mp4BuildStsc(vf, entries) {
+          var payload = new Uint8Array(8 + entries.length * 12);
+          payload.set(vf, 0);
+          mp4SetU32(payload, 4, entries.length);
+          for (var i = 0; i < entries.length; i++) {
+            var o = 8 + i * 12;
+            mp4SetU32(payload, o, entries[i][0]);
+            mp4SetU32(payload, o + 4, entries[i][1]);
+            mp4SetU32(payload, o + 8, entries[i][2]);
+          }
+          return mp4MakeBox('stsc', payload);
+        }
+        function mp4BuildStsz(vf, sampleSize, entries) {
+          var n = (sampleSize === 0) ? entries.length : 0;
+          var payload = new Uint8Array(12 + (sampleSize === 0 ? entries.length * 4 : 0));
+          payload.set(vf, 0);
+          mp4SetU32(payload, 4, sampleSize);
+          // sampleCount: for fixed-size samples the caller passes
+          // the total via entries === null + sampleSize; handled by
+          // mp4BuildStszFixed below. Here entries carry the count.
+          mp4SetU32(payload, 8, (sampleSize === 0) ? entries.length : n);
+          if (sampleSize === 0) {
+            for (var i = 0; i < entries.length; i++) mp4SetU32(payload, 12 + i * 4, entries[i]);
+          }
+          return mp4MakeBox('stsz', payload);
+        }
+        function mp4BuildStszFixed(vf, sampleSize, sampleCount) {
+          var payload = new Uint8Array(12);
+          payload.set(vf, 0);
+          mp4SetU32(payload, 4, sampleSize);
+          mp4SetU32(payload, 8, sampleCount);
+          return mp4MakeBox('stsz', payload);
+        }
+        function mp4BuildCo64(vf, offsets) {
+          var payload = new Uint8Array(8 + offsets.length * 8);
+          payload.set(vf, 0);
+          mp4SetU32(payload, 4, offsets.length);
+          for (var i = 0; i < offsets.length; i++) mp4SetU64(payload, 8 + i * 8, offsets[i]);
+          return mp4MakeBox('co64', payload);
+        }
+
+        // Duration fields: mvhd/mdhd share a layout (payload
+        // offset 16 for version 0, 24 for version 1); tkhd's
+        // duration sits at payload offset 20 (v0) / 28 (v1).
+        function mp4PatchDuration(rawBox, kind, newDuration) {
+          var header = 8;
+          var size32 = mp4U32(rawBox, 0);
+          if (size32 === 1) header = 16;
+          var version = rawBox[header];
+          var off;
+          if (kind === 'tkhd') off = header + (version === 1 ? 28 : 20);
+          else off = header + (version === 1 ? 24 : 16);
+          if (version === 1) mp4SetU64(rawBox, off, newDuration);
+          else {
+            if (newDuration > 4294967295) throw new Error(kind + 'ボックスのdurationが32bit上限を超えました(version 0ボックスでは表せません)');
+            mp4SetU32(rawBox, off, newDuration);
+          }
+          return rawBox;
+        }
+        function mp4ReadTimescaleDuration(rawBox, kind) {
+          var header = 8;
+          if (mp4U32(rawBox, 0) === 1) header = 16;
+          var version = rawBox[header];
+          if (kind === 'tkhd') {
+            // tkhd has no timescale of its own (it uses mvhd's).
+            var doff = header + (version === 1 ? 28 : 20);
+            return { timescale: 0, duration: version === 1 ? mp4U64(rawBox, doff) : mp4U32(rawBox, doff) };
+          }
+          var toff = header + (version === 1 ? 20 : 12);
+          var dfoff = header + (version === 1 ? 24 : 16);
+          return {
+            timescale: mp4U32(rawBox, toff),
+            duration: version === 1 ? mp4U64(rawBox, dfoff) : mp4U32(rawBox, dfoff)
+          };
+        }
+
+        // Parse one trak box (inside a moov buffer) into the
+        // pieces the merger needs. Throws on unexpected structure.
+        function mp4ParseTrack(buf, trakBox) {
+          var children = mp4ParseBoxes(buf, trakBox.dataStart, trakBox.dataEnd);
+          var tkhdBox = mp4FindBox(children, 'tkhd');
+          var mdiaBox = mp4FindBox(children, 'mdia');
+          if (!tkhdBox || !mdiaBox) throw new Error('トラック構造が想定外です(tkhd/mdia)');
+          var mdiaChildren = mp4ParseBoxes(buf, mdiaBox.dataStart, mdiaBox.dataEnd);
+          var mdhdBox = mp4FindBox(mdiaChildren, 'mdhd');
+          var hdlrBox = mp4FindBox(mdiaChildren, 'hdlr');
+          var minfBox = mp4FindBox(mdiaChildren, 'minf');
+          if (!mdhdBox || !minfBox) throw new Error('トラック構造が想定外です(mdhd/minf)');
+          var minfChildren = mp4ParseBoxes(buf, minfBox.dataStart, minfBox.dataEnd);
+          var stblBox = mp4FindBox(minfChildren, 'stbl');
+          if (!stblBox) throw new Error('トラック構造が想定外です(stbl)');
+          var stblChildren = mp4ParseBoxes(buf, stblBox.dataStart, stblBox.dataEnd);
+          var stsdBox = mp4FindBox(stblChildren, 'stsd');
+          var sttsBox = mp4FindBox(stblChildren, 'stts');
+          var stscBox = mp4FindBox(stblChildren, 'stsc');
+          var stszBox = mp4FindBox(stblChildren, 'stsz');
+          var stcoBox = mp4FindBox(stblChildren, 'stco') || mp4FindBox(stblChildren, 'co64');
+          if (!stsdBox || !sttsBox || !stscBox || !stszBox || !stcoBox) {
+            throw new Error('サンプルテーブルが不足しています');
+          }
+          var cttsBox = mp4FindBox(stblChildren, 'ctts');
+          var stssBox = mp4FindBox(stblChildren, 'stss');
+          var mdhd = mp4ReadTimescaleDuration(mp4CloneBox(buf, mdhdBox), 'mdhd');
+          var handler = '';
+          if (hdlrBox) handler = mp4TypeAt(buf, hdlrBox.dataStart + 8);
+          var stsz = mp4ParseStsz(buf, stszBox);
+          var stts = mp4ParseStts(buf, sttsBox);
+          if (mp4EntriesTotalCount(stts.entries) !== stsz.sampleCount) {
+            throw new Error('サンプル数が一致しません(stts/stsz)');
+          }
+          var ctts = cttsBox ? mp4ParseCtts(buf, cttsBox) : null;
+          if (ctts && mp4EntriesTotalCount(ctts.entries) !== stsz.sampleCount) {
+            throw new Error('サンプル数が一致しません(ctts/stsz)');
+          }
+          return {
+            trakBox: trakBox, children: children,
+            tkhdBox: tkhdBox, mdiaBox: mdiaBox, mdiaChildren: mdiaChildren,
+            mdhdBox: mdhdBox, minfBox: minfBox, minfChildren: minfChildren,
+            stblBox: stblBox, stblChildren: stblChildren,
+            stsdRaw: mp4CloneBox(buf, stsdBox),
+            handler: handler,
+            mdhdTimescale: mdhd.timescale, mdhdDuration: mdhd.duration,
+            stts: stts, ctts: ctts,
+            stss: stssBox ? mp4ParseStss(buf, stssBox) : null,
+            stsc: mp4ParseStsc(buf, stscBox),
+            stsz: stsz,
+            chunkOffsets: mp4ParseChunkOffsets(buf, stcoBox)
+          };
+        }
+
+        // Parse a whole moov box buffer (header included).
+        function mp4ParseMoov(moovBuf) {
+          var header = 8;
+          if (mp4U32(moovBuf, 0) === 1) header = 16;
+          if (mp4TypeAt(moovBuf, 4) !== 'moov') throw new Error('moovが見つかりません');
+          var children = mp4ParseBoxes(moovBuf, header, moovBuf.length);
+          var mvhdBox = mp4FindBox(children, 'mvhd');
+          if (!mvhdBox) throw new Error('mvhdが見つかりません');
+          var mvhd = mp4ReadTimescaleDuration(mp4CloneBox(moovBuf, mvhdBox), 'mvhd');
+          var trakBoxes = mp4FindBoxes(children, 'trak');
+          if (!trakBoxes.length) throw new Error('トラックがありません');
+          var tracks = trakBoxes.map(function (tb) { return mp4ParseTrack(moovBuf, tb); });
+          return { children: children, mvhdBox: mvhdBox, mvhdTimescale: mvhd.timescale, mvhdDuration: mvhd.duration, tracks: tracks };
+        }
+
+        // Scan a part Blob's top-level boxes, reading only the
+        // 16-byte headers — never the mdat body.
+        async function mp4ScanTopLevel(blob) {
+          var boxes = [];
+          var off = 0;
+          while (off + 8 <= blob.size) {
+            var hdr = new Uint8Array(await blob.slice(off, Math.min(blob.size, off + 16)).arrayBuffer());
+            var size32 = mp4U32(hdr, 0);
+            var type = mp4TypeAt(hdr, 4);
+            var header = 8, size;
+            if (size32 === 1) { size = mp4U64(hdr, 8); header = 16; }
+            else if (size32 === 0) size = blob.size - off;
+            else size = size32;
+            if (size < header || off + size > blob.size) throw new Error('トップレベルボックスが不正です(' + type + ')');
+            boxes.push({ type: type, start: off, size: size, headerSize: header, dataStart: off + header, dataEnd: off + size });
+            off += size;
+          }
+          if (off !== blob.size) throw new Error('トップレベルボックスの終端が一致しません');
+          return boxes;
+        }
+
+        // Merge an array of part Blobs (each an ordinary faststart
+        // MP4) into ONE MP4 Blob. Only each part's moov is read
+        // into memory — the mdat bodies and the parts as a whole
+        // are NEVER read via arrayBuffer/readFile here; the
+        // result references the bodies via Blob.slice, so there
+        // is NO limit on total size, part count, or single-part
+        // size. Throws an Error naming the exact part / track /
+        // box that failed when the structure is not one this
+        // merger can handle. onProgress(text, ratio) is called
+        // per part so a 27-part join never looks frozen, and the
+        // loop yields between parts so the browser can paint it
+        // (and release the previous part's raw moov buffer: only
+        // part 1's moov bytes are kept, for cloning its boxes).
+        async function mergeMp4PartsBlobs(partBlobs, onProgress) {
+          if (!partBlobs || partBlobs.length < 1) throw new Error('連結するパートがありません');
+          var infos = [];
+          for (var pi = 0; pi < partBlobs.length; pi++) {
+            if (onProgress) onProgress('索引を結合しています… パート ' + (pi + 1) + ' / ' + partBlobs.length + ' の索引を読み込み中', pi / partBlobs.length);
+            // Let the progress paint (and the previous part's
+            // temporaries be collected) before the next index.
+            await new Promise(function (r) { setTimeout(r, 0); });
+            var blob = partBlobs[pi];
+            var parsed, moovBuf, top, ftyp, moov, mdats;
+            try {
+              top = await mp4ScanTopLevel(blob);
+              ftyp = mp4FindBox(top, 'ftyp');
+              moov = mp4FindBox(top, 'moov');
+              mdats = mp4FindBoxes(top, 'mdat');
+              if (!ftyp) throw new Error('ftypボックスがありません');
+              if (!moov) throw new Error('moovボックス(索引)がありません');
+              if (mdats.length !== 1) throw new Error('mdatボックスが ' + mdats.length + ' 個あります(想定は1個)');
+              moovBuf = new Uint8Array(await blob.slice(moov.start, moov.dataEnd).arrayBuffer());
+              parsed = mp4ParseMoov(moovBuf);
+            } catch (scanErr) {
+              if (scanErr && scanErr.message === '__cancelled__') throw scanErr;
+              throw new Error('パート' + (pi + 1) + 'の索引が解析できませんでした: ' + (scanErr && scanErr.message ? scanErr.message : scanErr));
+            }
+            infos.push({ blob: blob, top: top, ftyp: ftyp, moov: moov, mdat: mdats[0], moovBuf: (pi === 0 ? moovBuf : null), parsed: parsed });
+            moovBuf = null;
+          }
+          if (onProgress) onProgress('索引を結合しています… 全パートの索引を読み終えました。サンプル表を結合中', 0.7);
+          var first = infos[0];
+          var trackCount = first.parsed.tracks.length;
+          var mvhdTimescale = first.parsed.mvhdTimescale;
+          if (!mvhdTimescale) throw new Error('パート1の索引: mvhdボックスのtimescaleが不正です');
+          for (pi = 1; pi < infos.length; pi++) {
+            if (infos[pi].parsed.tracks.length !== trackCount) throw new Error('パート' + (pi + 1) + 'の索引: トラック数がパート1と異なります(' + infos[pi].parsed.tracks.length + ' 本 vs ' + trackCount + ' 本)');
+            if (infos[pi].parsed.mvhdTimescale !== mvhdTimescale) throw new Error('パート' + (pi + 1) + 'の索引: mvhdのtimescaleがパート1と異なります');
+          }
+
+          // Per-track merged tables (chunk offsets are filled in
+          // on the second build pass, once the merged moov size —
+          // and therefore every mdat body's final position — is
+          // known; co64 entries are fixed-size, so the size does
+          // not change between passes).
+          var merged = [];
+          for (var ti = 0; ti < trackCount; ti++) {
+            var t0 = first.parsed.tracks[ti];
+            var sttsEntries = [], cttsEntries = null, stssEntries = null;
+            var stscEntries = [], stszEntries = null, stszFixedCount = 0;
+            var totalSamples = 0, totalChunks = 0, totalDurationUnits = 0;
+            var anyCtts = false, anyStss = false;
+            for (pi = 0; pi < infos.length; pi++) {
+              var tr = infos[pi].parsed.tracks[ti];
+              if (tr.handler !== t0.handler) throw new Error('パート' + (pi + 1) + 'のトラック' + (ti + 1) + ': 種別(handler)がパート1と異なります');
+              if (tr.mdhdTimescale !== t0.mdhdTimescale) throw new Error('パート' + (pi + 1) + 'のトラック' + (ti + 1) + ': mdhdのtimescaleがパート1と異なります');
+              if (!mp4BytesEqual(mp4StsdComparable(tr.stsdRaw), mp4StsdComparable(t0.stsdRaw))) throw new Error('パート' + (pi + 1) + 'のトラック' + (ti + 1) + ': コーデック設定(stsdボックス)がパート1と異なります');
+              if (tr.stsz.sampleSize !== t0.stsz.sampleSize) throw new Error('パート' + (pi + 1) + 'のトラック' + (ti + 1) + ': stszボックスのサンプルサイズ形式がパート1と異なります');
+              if (tr.ctts) anyCtts = true;
+              if (tr.stss) anyStss = true;
+            }
+            if (anyCtts) cttsEntries = [];
+            if (anyStss) stssEntries = [];
+            var chunkOffsetBase = 0, sampleBase = 0;
+            for (pi = 0; pi < infos.length; pi++) {
+              var trk = infos[pi].parsed.tracks[ti];
+              mp4AppendRuns(sttsEntries, trk.stts.entries);
+              totalDurationUnits += mp4EntriesTotalDuration(trk.stts.entries);
+              if (cttsEntries) {
+                if (trk.ctts) mp4AppendRuns(cttsEntries, trk.ctts.entries);
+                else {
+                  // No ctts in this part: all its samples carry
+                  // offset 0, expressed as one run.
+                  mp4AppendRuns(cttsEntries, [[trk.stsz.sampleCount, 0]]);
+                }
+              }
+              if (stssEntries) {
+                if (trk.stss) {
+                  for (var si2 = 0; si2 < trk.stss.entries.length; si2++) stssEntries.push(trk.stss.entries[si2] + sampleBase);
+                } else {
+                  // No stss in this part: every sample is a sync sample.
+                  for (var sj = 1; sj <= trk.stsz.sampleCount; sj++) stssEntries.push(sj + sampleBase);
+                }
+              }
+              for (var sci = 0; sci < trk.stsc.entries.length; sci++) {
+                var e = trk.stsc.entries[sci];
+                stscEntries.push([e[0] + chunkOffsetBase, e[1], e[2]]);
+              }
+              if (trk.stsz.sampleSize === 0) {
+                if (!stszEntries) stszEntries = [];
+                for (var szi = 0; szi < trk.stsz.entries.length; szi++) stszEntries.push(trk.stsz.entries[szi]);
+              } else {
+                stszFixedCount += trk.stsz.sampleCount;
+              }
+              // Validate that every chunk of this track points
+              // inside this part's mdat body, and enumerate the
+              // samples per chunk (stsc + stsz) to confirm the
+              // chunk layout is consistent.
+              var mdatStart = infos[pi].mdat.dataStart, mdatEnd = infos[pi].mdat.dataEnd;
+              for (var ci = 0; ci < trk.chunkOffsets.entries.length; ci++) {
+                var co = trk.chunkOffsets.entries[ci];
+                if (co < mdatStart || co >= mdatEnd) throw new Error('パート' + (pi + 1) + 'のトラック' + (ti + 1) + ': stco/co64ボックスのチャンク位置(' + (ci + 1) + '番目)がmdatの外を指しています');
+              }
+              var enumerated = 0, chunkIdx = 0;
+              for (var sce = 0; sce < trk.stsc.entries.length; sce++) {
+                var runStart = trk.stsc.entries[sce][0];
+                var runEnd = (sce + 1 < trk.stsc.entries.length) ? trk.stsc.entries[sce + 1][0] : trk.chunkOffsets.entries.length + 1;
+                if (runStart !== chunkIdx + 1) throw new Error('パート' + (pi + 1) + 'のトラック' + (ti + 1) + ': stscボックスのチャンク列挙が連続していません');
+                for (var cc = runStart; cc < runEnd; cc++) { enumerated += trk.stsc.entries[sce][1]; chunkIdx++; }
+              }
+              if (enumerated !== trk.stsz.sampleCount) throw new Error('パート' + (pi + 1) + 'のトラック' + (ti + 1) + ': stsc/stszボックスのサンプル数が一致しません');
+              totalSamples += trk.stsz.sampleCount;
+              totalChunks += trk.chunkOffsets.entries.length;
+              chunkOffsetBase += trk.chunkOffsets.entries.length;
+              sampleBase += trk.stsz.sampleCount;
+            }
+            var mdhdTotal = totalDurationUnits;
+            var tkhdTotal = Math.round(mdhdTotal * mvhdTimescale / t0.mdhdTimescale);
+            merged.push({
+              track: t0, sttsEntries: sttsEntries, cttsEntries: cttsEntries,
+              stssEntries: stssEntries, stscEntries: stscEntries,
+              stszEntries: stszEntries, stszFixedCount: stszFixedCount,
+              totalSamples: totalSamples, totalChunks: totalChunks,
+              mdhdTotal: mdhdTotal, tkhdTotal: tkhdTotal
+            });
+          }
+          var mvhdTotal = 0;
+          merged.forEach(function (mg) { if (mg.tkhdTotal > mvhdTotal) mvhdTotal = mg.tkhdTotal; });
+
+          function buildMoov(offsetsPerTrack) {
+            var moovChildren = [];
+            var trakIndex = 0;
+            first.parsed.children.forEach(function (child) {
+              if (child.type === 'mvhd') {
+                moovChildren.push(mp4PatchDuration(mp4CloneBox(first.moovBuf, child), 'mvhd', mvhdTotal));
+              } else if (child.type === 'trak') {
+                var mg = merged[trakIndex++];
+                var tr = mg.track;
+                // --- stbl ---
+                var stblChildren = [];
+                var coEmitted = false, cttsEmitted = false, stssEmitted = false;
+                tr.stblChildren.forEach(function (sc) {
+                  if (sc.type === 'stts') {
+                    stblChildren.push(mp4BuildRunTable('stts', tr.stts.vf, mg.sttsEntries));
+                    if (mg.cttsEntries && !tr.cttsPresent) {
+                      stblChildren.push(mp4BuildRunTable('ctts', mg.cttsVf, mg.cttsEntries));
+                      cttsEmitted = true;
+                    }
+                  } else if (sc.type === 'ctts') {
+                    if (mg.cttsEntries) { stblChildren.push(mp4BuildRunTable('ctts', tr.ctts.vf, mg.cttsEntries)); cttsEmitted = true; }
+                  } else if (sc.type === 'stss') {
+                    if (mg.stssEntries) { stblChildren.push(mp4BuildStss(tr.stss.vf, mg.stssEntries)); stssEmitted = true; }
+                  } else if (sc.type === 'stsc') {
+                    stblChildren.push(mp4BuildStsc(tr.stsc.vf, mg.stscEntries));
+                  } else if (sc.type === 'stsz') {
+                    if (tr.stsz.sampleSize === 0) stblChildren.push(mp4BuildStsz(tr.stsz.vf, 0, mg.stszEntries));
+                    else stblChildren.push(mp4BuildStszFixed(tr.stsz.vf, tr.stsz.sampleSize, mg.stszFixedCount));
+                  } else if (sc.type === 'stco' || sc.type === 'co64') {
+                    if (!coEmitted) {
+                      stblChildren.push(mp4BuildCo64(tr.chunkOffsets.vf, offsetsPerTrack[merged.indexOf(mg)]));
+                      coEmitted = true;
+                    }
+                  } else {
+                    stblChildren.push(mp4CloneBox(first.moovBuf, sc));
+                  }
+                });
+                if (mg.cttsEntries && !cttsEmitted) stblChildren.push(mp4BuildRunTable('ctts', mg.cttsVf, mg.cttsEntries));
+                if (mg.stssEntries && !stssEmitted) stblChildren.push(mp4BuildStss(mg.stssVf, mg.stssEntries));
+                var stblBox = mp4MakeBox('stbl', mp4ConcatBytes(stblChildren));
+                // --- minf ---
+                var minfChildren = [];
+                tr.minfChildren.forEach(function (mc) {
+                  if (mc.type === 'stbl') minfChildren.push(stblBox);
+                  else minfChildren.push(mp4CloneBox(first.moovBuf, mc));
+                });
+                var minfBox = mp4MakeBox('minf', mp4ConcatBytes(minfChildren));
+                // --- mdia ---
+                var mdiaChildren = [];
+                tr.mdiaChildren.forEach(function (dc) {
+                  if (dc.type === 'mdhd') mdiaChildren.push(mp4PatchDuration(mp4CloneBox(first.moovBuf, dc), 'mdhd', mg.mdhdTotal));
+                  else if (dc.type === 'minf') mdiaChildren.push(minfBox);
+                  else mdiaChildren.push(mp4CloneBox(first.moovBuf, dc));
+                });
+                var mdiaBox = mp4MakeBox('mdia', mp4ConcatBytes(mdiaChildren));
+                // --- trak (edts/elst is dropped: sample timing
+                // is fully expressed by ctts) ---
+                var trakChildren = [];
+                tr.children.forEach(function (tc) {
+                  if (tc.type === 'tkhd') trakChildren.push(mp4PatchDuration(mp4CloneBox(first.moovBuf, tc), 'tkhd', mg.tkhdTotal));
+                  else if (tc.type === 'mdia') trakChildren.push(mdiaBox);
+                  else if (tc.type === 'edts') { /* dropped */ }
+                  else trakChildren.push(mp4CloneBox(first.moovBuf, tc));
+                });
+                moovChildren.push(mp4MakeBox('trak', mp4ConcatBytes(trakChildren)));
+              } else {
+                moovChildren.push(mp4CloneBox(first.moovBuf, child));
+              }
+            });
+            return mp4MakeBox('moov', mp4ConcatBytes(moovChildren));
+          }
+
+          // ctts/stss version-flags + presence bookkeeping used by
+          // buildMoov when part 1 lacks a table that a later part
+          // has (the merged table then takes that part's vf).
+          merged.forEach(function (mg) {
+            mg.cttsVf = mg.track.ctts ? mg.track.ctts.vf : null;
+            mg.stssVf = mg.track.stss ? mg.track.stss.vf : null;
+            mg.track.cttsPresent = !!mg.track.ctts;
+            if (!mg.cttsVf || !mg.stssVf) {
+              for (var i = 0; i < infos.length; i++) {
+                var tr = infos[i].parsed.tracks[merged.indexOf(mg)];
+                if (!mg.cttsVf && tr.ctts) mg.cttsVf = tr.ctts.vf;
+                if (!mg.stssVf && tr.stss) mg.stssVf = tr.stss.vf;
+              }
+            }
+            if (mg.cttsEntries && !mg.cttsVf) mg.cttsVf = new Uint8Array(4);
+            if (mg.stssEntries && !mg.stssVf) mg.stssVf = new Uint8Array(4);
+          });
+
+          // Pass 1: placeholder offsets -> merged moov size.
+          var placeholder = merged.map(function (mg) {
+            var a = [];
+            for (var i = 0; i < mg.totalChunks; i++) a.push(0);
+            return a;
+          });
+          var moovSize = buildMoov(placeholder).length;
+
+          // Final layout: [ftyp][merged moov][mdat header][bodies…]
+          var MDAT_HEADER = 16; // 64-bit extended size, always safe
+          var mdatDataStart = first.ftyp.size + moovSize + MDAT_HEADER;
+          var offsetsPerTrack = merged.map(function () { return []; });
+          var bodyTotal = 0;
+          var partDataStart = mdatDataStart;
+          infos.forEach(function (info, pIdx) {
+            for (var t = 0; t < trackCount; t++) {
+              var trk = info.parsed.tracks[t];
+              for (var c = 0; c < trk.chunkOffsets.entries.length; c++) {
+                offsetsPerTrack[t].push(partDataStart + (trk.chunkOffsets.entries[c] - info.mdat.dataStart));
+              }
+            }
+            var bodySize = info.mdat.size - info.mdat.headerSize;
+            bodyTotal += bodySize;
+            partDataStart += bodySize;
+          });
+
+          // Pass 2: real offsets (same size — co64 is fixed-width).
+          var finalMoov;
+          try {
+            finalMoov = buildMoov(offsetsPerTrack);
+          } catch (buildErr) {
+            throw new Error('結合した索引(moov)の構築に失敗しました: ' + (buildErr && buildErr.message ? buildErr.message : buildErr));
+          }
+          if (finalMoov.length !== moovSize) throw new Error('結合した索引(moov)の構築に失敗しました: サイズが1回目と2回目で変わりました');
+
+          // THE join gate — structural verification ONLY: the
+          // rebuilt moov is re-parsed and, per track, the sample
+          // count, the stts duration sum (exact, in track units)
+          // and the chunk count must equal the parts' totals.
+          // Nothing else gates the join: no <video> metadata
+          // load (Safari can fail or stall on that alone for a
+          // GB-scale Blob), no comparison against durations
+          // measured elsewhere, and no size/part-count limit.
+          // The mdhd cross-check below is only a sanity check
+          // with a tolerance that SCALES with the part count —
+          // each part's mdhd duration is rounded to its own
+          // timescale, so a fixed 1s tolerance falsely rejected
+          // many-part joins (27 parts × rounding alone exceeds
+          // it) even when every exact check passed.
+          if (onProgress) onProgress('索引を結合しています… 結合した索引を検証中', 0.9);
+          var check;
+          try {
+            check = mp4ParseMoov(finalMoov);
+          } catch (verifyErr) {
+            throw new Error('結合した索引の検証に失敗しました: 再解析できませんでした: ' + (verifyErr && verifyErr.message ? verifyErr.message : verifyErr));
+          }
+          if (check.tracks.length !== trackCount) throw new Error('結合した索引の検証に失敗しました: トラック数が一致しません(' + check.tracks.length + ' 本 vs ' + trackCount + ' 本)');
+          for (var vt = 0; vt < trackCount; vt++) {
+            var ct = check.tracks[vt], mgv = merged[vt];
+            if (ct.stsz.sampleCount !== mgv.totalSamples) throw new Error('結合した索引の検証に失敗しました: トラック' + (vt + 1) + 'のサンプル数(stsz)が一致しません');
+            if (mp4EntriesTotalDuration(ct.stts.entries) !== mgv.mdhdTotal) throw new Error('結合した索引の検証に失敗しました: トラック' + (vt + 1) + 'のstts合計が一致しません');
+            if (ct.chunkOffsets.entries.length !== mgv.totalChunks) throw new Error('結合した索引の検証に失敗しました: トラック' + (vt + 1) + 'のチャンク数(co64)が一致しません');
+            var partDurSec = 0;
+            for (var vp = 0; vp < infos.length; vp++) {
+              var pt2 = infos[vp].parsed.tracks[vt];
+              partDurSec += pt2.mdhdDuration / pt2.mdhdTimescale;
+            }
+            var mergedSec = mgv.mdhdTotal / mgv.track.mdhdTimescale;
+            var durTol = Math.max(2, infos.length * 0.5, partDurSec * 0.02);
+            if (Math.abs(mergedSec - partDurSec) > durTol) throw new Error('結合した索引の検証に失敗しました: トラック' + (vt + 1) + 'の長さの合計がパート合計と大きくずれています');
+          }
+          if (onProgress) onProgress('索引を結合しています… 検証が完了しました', 1);
+
+          var mdatHeader = new Uint8Array(MDAT_HEADER);
+          mp4SetU32(mdatHeader, 0, 1);
+          mp4WriteType(mdatHeader, 4, 'mdat');
+          mp4SetU64(mdatHeader, 8, bodyTotal + MDAT_HEADER);
+
+          var pieces = [];
+          pieces.push(first.blob.slice(first.ftyp.start, first.ftyp.dataEnd));
+          pieces.push(new Blob([finalMoov], { type: 'video/mp4' }));
+          pieces.push(new Blob([mdatHeader], { type: 'video/mp4' }));
+          infos.forEach(function (info) {
+            pieces.push(info.blob.slice(info.mdat.dataStart, info.mdat.dataEnd));
+          });
+          var mergedBlob = new Blob(pieces, { type: 'video/mp4' });
+          return { blob: mergedBlob, duration: mvhdTotal / mvhdTimescale };
+        }
+        /* MP4_MERGE_END */
+
+        /* ---------------- join entry point ----------------
+           Success is decided ONLY by the structural verification
+           inside mergeMp4PartsBlobs (re-parsing the rebuilt moov:
+           per-track sample counts / stts sums / chunk counts must
+           match the parts). There is no total-size, part-count or
+           single-part-size limit, no comparison against a
+           duration measured elsewhere, and no <video> metadata
+           gate — all three falsely rejected large joins before.
+           On failure lastJoinReason carries the specific cause
+           (which part / track / box, and why) from the merger. */
+        var lastJoinReason = '';
+
+        async function joinPartsByMoovMerge(parts) {
+          lastJoinReason = '';
+          var res = null;
+          try {
+            res = await mergeMp4PartsBlobs(parts.map(function (pt) { return pt.blob; }), function (text, ratio) {
+              // Join progress: the progress panel is still up at
+              // this point, so a 27-part index merge shows what it
+              // is doing instead of looking frozen.
+              statusText.textContent = text;
+              statusSub.textContent = (ratio != null) ? '連結 ' + Math.round(ratio * 100) + '%' : '';
+              if (ratio != null) barFill.style.width = (ratio * 100).toFixed(1) + '%';
+            });
+          } catch (e) {
+            if (cancelled || (e && e.message === '__cancelled__')) throw e;
+            lastJoinReason = (e && e.message) ? e.message : String(e);
+            return null;
+          }
+          checkCancelled();
+          if (!res || !res.blob || res.blob.size === 0) {
+            lastJoinReason = '結合した索引の検証に失敗しました: 連結ファイルが空でした';
+            return null;
+          }
+          return res;
+        }
+
+        // Main display is the joined single MP4 when concatenation
+        // succeeded; the per-part list is then only a small backup
+        // (no per-part previews). Without a joined file it is the
+        // full result, with a preview per part — except when there
+        // are many parts or a GB-scale total, where auto-loading
+        // dozens of <video> previews at once could itself exhaust
+        // the device: each preview then loads only on tap.
+        function renderPartsResult(count, asBackup, note) {
+          var lazyPartPreviews = false;
+          (function () {
+            var t = 0;
+            resultParts.forEach(function (pt) { t += pt.blob.size; });
+            lazyPartPreviews = (count > 8 || t > PREVIEW_AUTOLOAD_LIMIT);
+          })();
+          if (asBackup) {
+            partsResult.classList.remove('hidden');
+            partsResult.classList.add('parts-backup');
+          } else {
+            singleResult.classList.add('hidden');
+            partsResult.classList.remove('hidden');
+            partsResult.classList.remove('parts-backup');
+          }
           var totalSize = 0;
           resultParts.forEach(function (pt) { totalSize += pt.blob.size; });
-          partsSummary.textContent = count + '個のパートに分割して変換しました(変換方法: ' + plan.modeLabel + ' / 合計 ' + fmtSize(totalSize) + ' / 所要時間 ' + fmtElapsed(Date.now() - startTime) + ')。各パートは単体で再生できます。';
+          partsSummary.textContent = asBackup
+            ? '予備: パート別ファイル(' + count + '個 / 合計 ' + fmtSize(totalSize) + ')。上の連結版が再生できない場合に使ってください。各パートは単体で再生できます。'
+            : count + '個のパートに分割して変換しました(変換方法: ' + plan.modeLabel + ' / 合計 ' + fmtSize(totalSize) + ' / 所要時間 ' + fmtElapsed(Date.now() - startTime) + ')。各パートは単体で再生できます。' + (note ? ' ' + note : '');
           partsList.innerHTML = '';
           resultParts.forEach(function (pt, idx) {
             if (!pt.url) pt.url = URL.createObjectURL(pt.blob);
             var wrap = document.createElement('div');
-            wrap.className = 'part-item';
-            var vid = document.createElement('video');
-            vid.className = 'preview';
-            vid.controls = true;
-            vid.playsInline = true;
-            vid.preload = 'metadata';
-            vid.src = pt.url;
+            wrap.className = asBackup ? 'part-item compact' : 'part-item';
+            var vid = null;
+            var vidBtn = null;
+            if (!asBackup) {
+              vid = document.createElement('video');
+              vid.className = 'preview';
+              vid.controls = true;
+              vid.playsInline = true;
+              if (lazyPartPreviews) {
+                // No src yet: this part's preview loads only if
+                // the user taps its button, one part at a time.
+                vid.preload = 'none';
+                vid.classList.add('hidden');
+                vidBtn = document.createElement('button');
+                vidBtn.type = 'button';
+                vidBtn.className = 'btn-block';
+                vidBtn.style.marginBottom = '10px';
+                vidBtn.textContent = 'パート ' + (idx + 1) + ' のプレビューを表示';
+                (function (v, b, url) {
+                  b.addEventListener('click', function () {
+                    b.classList.add('hidden');
+                    v.classList.remove('hidden');
+                    v.src = url;
+                    try { v.load(); } catch (e) {}
+                  });
+                })(vid, vidBtn, pt.url);
+              } else {
+                vid.preload = 'metadata';
+                vid.src = pt.url;
+              }
+            }
             var nameEl = document.createElement('p');
             nameEl.className = 'part-name';
             nameEl.textContent = pt.name;
@@ -1263,19 +2770,32 @@
             meta.textContent = fmtSize(pt.blob.size) + ' / ' + pt.verify;
             var row = document.createElement('div');
             row.className = 'btn-row';
-            var shareB = document.createElement('button');
-            shareB.type = 'button';
-            shareB.className = 'btn-primary';
-            shareB.textContent = '共有して保存';
-            shareB.addEventListener('click', function () { shareBlobFile(pt.blob, pt.name, null); });
+            // Same size rule as the single result: a part over
+            // SHARE_LIMIT gets download as its ONLY (primary)
+            // save path — no share button is created for it.
+            // Parts are normally tens of MB, so this is a
+            // belt-and-braces guard.
+            var partLarge = pt.blob.size > SHARE_LIMIT;
             var dl = document.createElement('a');
-            dl.className = 'btn';
-            dl.textContent = 'ダウンロード';
             dl.href = pt.url;
             dl.setAttribute('download', pt.name);
-            row.appendChild(shareB);
-            row.appendChild(dl);
-            wrap.appendChild(vid);
+            if (partLarge) {
+              dl.className = 'btn btn-primary';
+              dl.textContent = 'ダウンロードして保存';
+              row.appendChild(dl);
+            } else {
+              var shareB = document.createElement('button');
+              shareB.type = 'button';
+              shareB.className = 'btn-primary';
+              shareB.textContent = '共有して保存';
+              shareB.addEventListener('click', function () { shareBlobFile(pt.blob, pt.name, null); });
+              dl.className = 'btn';
+              dl.textContent = 'ダウンロード';
+              row.appendChild(shareB);
+              row.appendChild(dl);
+            }
+            if (vidBtn) wrap.appendChild(vidBtn);
+            if (vid) wrap.appendChild(vid);
             wrap.appendChild(nameEl);
             wrap.appendChild(meta);
             wrap.appendChild(row);
@@ -1297,7 +2817,9 @@
           loadSeq++;
           stopTimer();
           try { if (ffmpeg) ffmpeg.terminate(); } catch (e) {}
+          ffmpeg = null;
           loaded = false;
+          preparedInput = null; // the mount/chunks die with the worker
           busy = false;
           segState = null;
           segmenting = false;
@@ -1315,12 +2837,243 @@
           showError('キャンセルしました。もう一度「コーデックを解析する」からやり直してください。');
         });
 
+        /* ---------------- save layout by size ----------------
+           One rule, applied to the joined/single result AND to
+           every part alike: over SHARE_LIMIT the download anchor
+           is the primary (and only) save path and the share
+           button is not rendered at all — a control that crashes
+           the page when tapped must not stay tappable. At or
+           below the limit, share is primary and download is the
+           secondary path, as before. */
+
+        function applySingleSaveLayout(size) {
+          if (size > SHARE_LIMIT) {
+            shareBtn.classList.add('hidden');
+            downloadBtn.classList.add('btn-primary');
+            downloadBtn.textContent = 'ダウンロードして保存';
+            largeSaveNote.classList.remove('hidden');
+            saveNote.classList.add('hidden');
+          } else {
+            shareBtn.classList.remove('hidden');
+            shareBtn.disabled = false;
+            downloadBtn.classList.remove('btn-primary');
+            downloadBtn.textContent = 'ダウンロード';
+            largeSaveNote.classList.add('hidden');
+            saveNote.classList.remove('hidden');
+          }
+        }
+
+        function resetSaveLayout() {
+          shareBtn.classList.remove('hidden');
+          shareBtn.disabled = false;
+          downloadBtn.classList.remove('btn-primary');
+          downloadBtn.textContent = 'ダウンロード';
+          largeSaveNote.classList.add('hidden');
+          saveNote.classList.remove('hidden');
+        }
+
+        /* ---------------- OPFS backup of the result ----------------
+           After a conversion completes, the result parts are
+           copied into the Origin Private File System so that a
+           crash at save time (e.g. the share sheet killing the
+           page) no longer loses the conversion: on the next
+           page open the backup is offered for restore. Writes
+           stream the Blob chunk by chunk (Blob.stream() reader
+           → OPFS writable), so the whole file never sits in
+           memory. OPFS is best-effort only: where it is
+           unavailable (older Safari, in-app browsers) the
+           backup is silently skipped and everything behaves
+           exactly as before. Nothing here ever throws into the
+           conversion flow. */
+
+        var OPFS_DIR = 'mpg-mp4-backup-v1';
+        var backupMetaCache = null;
+
+        function opfsSupported() {
+          return !!(navigator.storage && navigator.storage.getDirectory);
+        }
+        function opfsDir(create) {
+          return navigator.storage.getDirectory().then(function (root) {
+            return root.getDirectoryHandle(OPFS_DIR, { create: !!create });
+          });
+        }
+        // Stream one Blob into OPFS without loading it whole.
+        function opfsWriteBlob(dir, name, blob) {
+          return dir.getFileHandle(name, { create: true }).then(function (fh) {
+            return fh.createWritable().then(function (w) {
+              function fail(err) {
+                return Promise.resolve().then(function () { return w.abort(); }).catch(function () {}).then(function () { throw err; });
+              }
+              if (blob.stream) {
+                var reader = blob.stream().getReader();
+                function pump() {
+                  return reader.read().then(function (r) {
+                    if (r.done) return w.close();
+                    return w.write(r.value).then(pump);
+                  });
+                }
+                return pump().catch(fail);
+              }
+              // No Blob.stream(): copy in bounded 8MB slices.
+              var SLICE = 8 * 1024 * 1024;
+              var off = 0;
+              function step() {
+                if (off >= blob.size) return w.close();
+                var end = Math.min(blob.size, off + SLICE);
+                return blob.slice(off, end).arrayBuffer().then(function (buf) {
+                  off = end;
+                  return w.write(new Uint8Array(buf)).then(step);
+                });
+              }
+              return step().catch(fail);
+            });
+          });
+        }
+        function opfsWriteText(dir, name, text) {
+          return dir.getFileHandle(name, { create: true }).then(function (fh) {
+            return fh.createWritable().then(function (w) {
+              return w.write(text).then(function () { return w.close(); });
+            });
+          });
+        }
+        function deleteOpfsBackup() {
+          backupMetaCache = null;
+          if (!opfsSupported()) return Promise.resolve();
+          return navigator.storage.getDirectory().then(function (root) {
+            return root.removeEntry(OPFS_DIR, { recursive: true });
+          }).catch(function () {});
+        }
+        function setBackupSavedUI() {
+          backupStatus.textContent = 'この結果は端末内に退避しました。ページが落ちても、次に開いたときに復元できます。';
+          backupStatus.classList.remove('hidden');
+          deleteBackupBtn.classList.remove('hidden');
+        }
+        // Save the just-finished result. Segmented results save
+        // their parts (the joined file is rebuilt from them on
+        // restore by the same index merge); a single-file result
+        // saves the one Blob. meta.json is written LAST, so its
+        // presence means a complete backup. Never rejects.
+        function saveBackupToOpfs() {
+          if (!opfsSupported()) return Promise.resolve();
+          var kind, items;
+          if (resultParts.length) {
+            kind = 'parts';
+            items = resultParts.map(function (pt) {
+              return { blob: pt.blob, name: pt.name, verify: pt.verify, duration: pt.duration };
+            });
+          } else if (resultBlob) {
+            kind = 'single';
+            items = [{ blob: resultBlob, name: outputName, verify: '', duration: null }];
+          } else {
+            return Promise.resolve();
+          }
+          var meta = {
+            version: 1,
+            kind: kind,
+            outputName: outputName,
+            modeLabel: (plan && plan.modeLabel) || '',
+            savedAt: Date.now(),
+            parts: items.map(function (it, i) {
+              return { file: 'data' + i + '.mp4', name: it.name, size: it.blob.size, verify: it.verify || '', duration: (it.duration != null ? it.duration : null) };
+            })
+          };
+          // Clear any older backup first so stale part files
+          // from a previous, longer conversion cannot survive.
+          return deleteOpfsBackup().then(function () {
+            return opfsDir(true);
+          }).then(function (dir) {
+            var chain = Promise.resolve();
+            items.forEach(function (it, i) {
+              chain = chain.then(function () { return opfsWriteBlob(dir, 'data' + i + '.mp4', it.blob); });
+            });
+            return chain.then(function () {
+              return opfsWriteText(dir, 'meta.json', JSON.stringify(meta));
+            });
+          }).then(function () {
+            backupMetaCache = meta;
+            setBackupSavedUI();
+          }).catch(function () {
+            // Backup is insurance only — a failure changes
+            // nothing about the result already on screen.
+            return deleteOpfsBackup();
+          });
+        }
+        function readBackupMeta() {
+          if (backupMetaCache) return Promise.resolve(backupMetaCache);
+          return opfsDir(false).then(function (dir) {
+            return dir.getFileHandle('meta.json');
+          }).then(function (fh) {
+            return fh.getFile();
+          }).then(function (f) {
+            return f.text();
+          }).then(function (text) {
+            var meta = JSON.parse(text);
+            if (!meta || !meta.parts || !meta.parts.length) throw new Error('no backup');
+            backupMetaCache = meta;
+            return meta;
+          });
+        }
+        function checkBackupOnLoad() {
+          if (!opfsSupported()) return;
+          readBackupMeta().then(function (meta) {
+            var total = 0;
+            meta.parts.forEach(function (p) { total += p.size || 0; });
+            backupInfo.textContent = meta.outputName + ' / ' + meta.parts.length + 'パート / 合計 ' + fmtSize(total);
+            backupPanel.classList.remove('hidden');
+          }).catch(function () {
+            backupPanel.classList.add('hidden');
+          });
+        }
+
         /* ---------------- result actions ---------------- */
 
         function cleanupResult(keepNew) {
           if (resultURL && !keepNew) { URL.revokeObjectURL(resultURL); resultURL = null; }
-          if (!keepNew) { resultBlob = null; preview.removeAttribute('src'); previewError.classList.add('hidden'); }
+          if (!keepNew) {
+            resultBlob = null;
+            preview.removeAttribute('src');
+            try { preview.load(); } catch (e) {}
+            preview.classList.remove('hidden');
+            previewError.classList.add('hidden');
+            previewLoadBtn.classList.add('hidden');
+            previewSkippedNote.classList.add('hidden');
+            resetSaveLayout();
+          }
         }
+
+        // Result preview setup. Small results load into the
+        // <video> right away, as before. A result over
+        // PREVIEW_AUTOLOAD_LIMIT (1GB) is NOT loaded at all:
+        // the video stays empty and hidden, and only the
+        // "タップでプレビューを表示" button is shown — the
+        // object URL is assigned to the video only when the
+        // user explicitly taps it. Displaying the result and
+        // saving it therefore never depend on Safari being
+        // able to preview a GB-scale Blob.
+        function setupResultPreview(blobSize) {
+          previewError.classList.add('hidden');
+          if (blobSize > PREVIEW_AUTOLOAD_LIMIT) {
+            preview.removeAttribute('src');
+            try { preview.load(); } catch (e) {}
+            preview.classList.add('hidden');
+            previewLoadBtn.classList.remove('hidden');
+            previewSkippedNote.classList.remove('hidden');
+          } else {
+            preview.classList.remove('hidden');
+            previewLoadBtn.classList.add('hidden');
+            previewSkippedNote.classList.add('hidden');
+            preview.src = resultURL;
+          }
+        }
+
+        previewLoadBtn.addEventListener('click', function () {
+          if (!resultURL) return;
+          previewSkippedNote.classList.add('hidden');
+          previewLoadBtn.classList.add('hidden');
+          preview.classList.remove('hidden');
+          preview.src = resultURL;
+          try { preview.load(); } catch (e) {}
+        });
 
         preview.addEventListener('error', function () {
           if (preview.getAttribute('src')) previewError.classList.remove('hidden');
@@ -1335,12 +3088,24 @@
         // is not supported.
         function shareBlobFile(blob, name, fallbackAnchor) {
           if (!blob) return;
+          // Hard guard, independent of which buttons are shown:
+          // a file over the share limit never reaches
+          // navigator.share — on iOS that hand-off itself is
+          // what kills the page. Use the download path instead.
+          if (blob.size > SHARE_LIMIT) {
+            if (fallbackAnchor) fallbackAnchor.click();
+            else showError('大きいファイルは共有だと落ちることがあるため、ダウンロードで保存してください');
+            return;
+          }
           var file = null;
           try { file = new File([blob], name, { type: 'video/mp4' }); } catch (e) { file = null; }
           if (file && navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
             navigator.share({ files: [file], title: name }).catch(function (err) {
               if (err && err.name !== 'AbortError') {
-                showError('共有に失敗しました。「ダウンロード」ボタンから保存を試してください。\n' + (err && err.message ? err.message : err));
+                // A share failure is ONLY a share failure: the
+                // converted / joined file above stays exactly as
+                // it is, and the download button remains usable.
+                showError('共有に失敗しました(変換・連結は完了しています)。「ダウンロード」ボタンから保存を試してください。\n' + (err && err.message ? err.message : err));
               }
             });
           } else if (fallbackAnchor) {
@@ -1352,11 +3117,144 @@
           shareBlobFile(resultBlob, outputName, downloadBtn);
         });
 
+        /* ---------------- OPFS backup: restore / discard ---------------- */
+
+        // Rebuild the result screen from the OPFS backup. Part
+        // files come back as File objects (disk-backed Blobs —
+        // nothing is read into memory), the joined single MP4
+        // is rebuilt with the same moov index merge used after
+        // conversion, and saving follows the same size rule as
+        // a fresh result (applySingleSaveLayout / per-part
+        // layout in renderPartsResult).
+        async function restoreBackup() {
+          if (busy) return;
+          hideError();
+          restoreBtn.disabled = true;
+          restoreBtn.textContent = '復元しています…';
+          try {
+            var meta = await readBackupMeta();
+            var dir = await opfsDir(false);
+            cleanupResult(false);
+            cleanupParts();
+            plan = null;
+            probedInfo = null;
+            outputName = meta.outputName || 'output.mp4';
+            infoPanel.classList.add('hidden');
+            progressPanel.classList.add('hidden');
+            if (meta.kind === 'single') {
+              var sfh = await dir.getFileHandle(meta.parts[0].file);
+              var sfile = await sfh.getFile();
+              if (!sfile || sfile.size === 0) throw new Error('退避データが空でした');
+              resultBlob = sfile;
+              resultURL = URL.createObjectURL(resultBlob);
+              previewError.classList.add('hidden');
+              setupResultPreview(resultBlob.size);
+              downloadBtn.href = resultURL;
+              downloadBtn.setAttribute('download', outputName);
+              $('outName').textContent = outputName;
+              $('outSize').textContent = fmtSize(resultBlob.size);
+              $('outMode').textContent = meta.modeLabel || '—';
+              $('outVerify').textContent = '退避データから復元しました';
+              $('outTime').textContent = '—';
+              applySingleSaveLayout(resultBlob.size);
+              singleResult.classList.remove('hidden');
+              partsResult.classList.add('hidden');
+            } else {
+              var restored = [];
+              for (var i = 0; i < meta.parts.length; i++) {
+                var pfh = await dir.getFileHandle(meta.parts[i].file);
+                var pfile = await pfh.getFile();
+                if (!pfile || pfile.size === 0) throw new Error('パート ' + (i + 1) + ' の退避データが空でした');
+                restored.push({
+                  name: meta.parts[i].name,
+                  blob: pfile,
+                  url: null,
+                  duration: meta.parts[i].duration,
+                  verify: meta.parts[i].verify || '退避データから復元しました'
+                });
+              }
+              resultParts = restored;
+              plan = { modeLabel: meta.modeLabel || '', modeKey: '', videoCodec: '', audioCodec: null, videoCopy: false, audioCopy: false, duration: null, args: [], detail: '', quality: '' };
+              startTime = Date.now();
+              var joined = false;
+              var joinNote = '';
+              if (resultParts.length > 1) {
+                try {
+                  var joinRes = await joinPartsByMoovMerge(resultParts);
+                  if (joinRes && joinRes.blob && joinRes.blob.size > 0) {
+                    resultBlob = joinRes.blob;
+                    resultURL = URL.createObjectURL(resultBlob);
+                    previewError.classList.add('hidden');
+                    setupResultPreview(resultBlob.size);
+                    downloadBtn.href = resultURL;
+                    downloadBtn.setAttribute('download', outputName);
+                    $('outName').textContent = outputName;
+                    $('outSize').textContent = fmtSize(resultBlob.size);
+                    $('outMode').textContent = meta.modeLabel || '—';
+                    $('outVerify').textContent = '合格(索引の構造検証) — ' + resultParts.length + 'パートを連結 / 長さ ' + fmtDuration(joinRes.duration);
+                    $('outTime').textContent = '—';
+                    applySingleSaveLayout(resultBlob.size);
+                    singleResult.classList.remove('hidden');
+                    joined = true;
+                  } else {
+                    joinNote = '連結できませんでした（' + (lastJoinReason || '結合した索引の検証に失敗しました') + '）。パート別に表示します。';
+                  }
+                } catch (joinErr) {
+                  joinNote = '連結できませんでした（' + (joinErr && joinErr.message ? joinErr.message : '結合した索引の検証に失敗しました') + '）。パート別に表示します。';
+                }
+              } else {
+                // A one-part backup IS the whole video already.
+                var only = resultParts[0];
+                resultBlob = only.blob;
+                resultURL = URL.createObjectURL(resultBlob);
+                previewError.classList.add('hidden');
+                setupResultPreview(resultBlob.size);
+                downloadBtn.href = resultURL;
+                downloadBtn.setAttribute('download', outputName);
+                $('outName').textContent = outputName;
+                $('outSize').textContent = fmtSize(resultBlob.size);
+                $('outMode').textContent = meta.modeLabel || '—';
+                $('outVerify').textContent = only.verify || '退避データから復元しました';
+                $('outTime').textContent = '—';
+                applySingleSaveLayout(resultBlob.size);
+                singleResult.classList.remove('hidden');
+                joined = true;
+              }
+              renderPartsResult(resultParts.length, joined, joinNote);
+            }
+            backupPanel.classList.add('hidden');
+            setBackupSavedUI();
+            resultPanel.classList.remove('hidden');
+            resultPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+          } catch (e) {
+            showError('前回の変換結果を復元できませんでした。\n' + (e && e.message ? e.message : e));
+          }
+          restoreBtn.disabled = false;
+          restoreBtn.textContent = '復元する';
+        }
+        restoreBtn.addEventListener('click', restoreBackup);
+
+        function discardBackupUI() {
+          deleteOpfsBackup().then(function () {
+            backupPanel.classList.add('hidden');
+            backupStatus.classList.add('hidden');
+            backupStatus.textContent = '';
+            deleteBackupBtn.classList.add('hidden');
+          });
+        }
+        discardBackupBtn.addEventListener('click', discardBackupUI);
+        deleteBackupBtn.addEventListener('click', discardBackupUI);
+
+        // Offer any backup left by a previous (possibly crashed)
+        // session as soon as the page opens.
+        checkBackupOnLoad();
+
         function resetAll() {
           cleanupResult(false);
           cleanupParts();
           $('rowLarge').classList.add('hidden');
           currentFile = null;
+          preparedInput = null;
           plan = null;
           probedInfo = null;
           modePicker.classList.add('hidden');
