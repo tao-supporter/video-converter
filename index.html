@@ -325,35 +325,46 @@
       (function () {
         'use strict';
 
-        // FFmpeg engine files are bundled with this page (assets/ffmpeg/).
-        // CDN mirrors are only a fallback if the bundled files cannot load.
+        // FFmpeg engine files are resolved as complete SETS, never file
+        // by file: one attempt uses exactly one set for everything —
+        // ffmpeg.js, the worker (814.ffmpeg.js), util, ffmpeg-core.js
+        // and ffmpeg-core.wasm. Mixing sets is what broke the GitHub
+        // Pages deployment: the core URLs switched to a CDN while the
+        // worker URL stayed at the bundled relative path, which does
+        // not exist when only index.html was copied there, so
+        // ffmpeg.load() hung until the 90s timeout on every CDN
+        // attempt. Versions are pinned: util is 0.12.1 on purpose —
+        // the 0.12.2 UMD build is broken upstream ("exports is not
+        // defined") and must never be used.
         var ASSET_BASE = new URL('assets/ffmpeg/', document.baseURI).href;
-        var CORE_SOURCES = [
-          { label: '同梱ファイル', base: ASSET_BASE },
-          { label: 'jsdelivr', base: 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/umd/' },
-          { label: 'unpkg', base: 'https://unpkg.com/@ffmpeg/core@0.12.10/dist/umd/' }
-        ];
-        // Library (ffmpeg.js / util) sources, in priority order: bundled
-        // files first, then these CDNs. Versions are pinned: util is
-        // 0.12.1 on purpose — the 0.12.2 UMD build is broken upstream
-        // ("exports is not defined") and must never be used.
-        var LIB_CDNS = [
+        var ENGINE_SOURCES = [
+          { label: '同梱ファイル',
+            ffmpegJS: ASSET_BASE + 'ffmpeg.js',
+            workerJS: ASSET_BASE + '814.ffmpeg.js',
+            utilJS: ASSET_BASE + 'util.js',
+            coreJS: ASSET_BASE + 'ffmpeg-core.js',
+            coreWasm: ASSET_BASE + 'ffmpeg-core.wasm' },
           { label: 'jsdelivr',
-            ffmpegURL: 'https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.15/dist/umd/ffmpeg.js',
-            utilURL: 'https://cdn.jsdelivr.net/npm/@ffmpeg/util@0.12.1/dist/umd/index.js',
-            ffmpegBase: 'https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.15/dist/umd/' },
+            ffmpegJS: 'https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.15/dist/umd/ffmpeg.js',
+            workerJS: 'https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.15/dist/umd/814.ffmpeg.js',
+            utilJS: 'https://cdn.jsdelivr.net/npm/@ffmpeg/util@0.12.1/dist/umd/index.js',
+            coreJS: 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/umd/ffmpeg-core.js',
+            coreWasm: 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/umd/ffmpeg-core.wasm' },
           { label: 'unpkg',
-            ffmpegURL: 'https://unpkg.com/@ffmpeg/ffmpeg@0.12.15/dist/umd/ffmpeg.js',
-            utilURL: 'https://unpkg.com/@ffmpeg/util@0.12.1/dist/umd/index.js',
-            ffmpegBase: 'https://unpkg.com/@ffmpeg/ffmpeg@0.12.15/dist/umd/' }
+            ffmpegJS: 'https://unpkg.com/@ffmpeg/ffmpeg@0.12.15/dist/umd/ffmpeg.js',
+            workerJS: 'https://unpkg.com/@ffmpeg/ffmpeg@0.12.15/dist/umd/814.ffmpeg.js',
+            utilJS: 'https://unpkg.com/@ffmpeg/util@0.12.1/dist/umd/index.js',
+            coreJS: 'https://unpkg.com/@ffmpeg/core@0.12.10/dist/umd/ffmpeg-core.js',
+            coreWasm: 'https://unpkg.com/@ffmpeg/core@0.12.10/dist/umd/ffmpeg-core.wasm' }
         ];
-        // Which LIB_CDNS entry ffmpeg.js was actually loaded from (its
-        // worker is resolved relative to that URL). null = bundled files.
-        var libCDN = null;
+        // Which ENGINE_SOURCES set provided the current library globals
+        // (FFmpegWASM / FFmpegUtil). The static <script> tags above are
+        // the bundled set, so if both globals already exist they came
+        // from set 0; -1 = no usable globals yet.
+        var libSourceIdx = (window.FFmpegWASM && window.FFmpegUtil) ? 0 : -1;
         var VIDEO_PLAYABLE = ['h264', 'hevc', 'mpeg4'];
         var AUDIO_PLAYABLE = ['aac', 'mp3', 'alac'];
         var AUDIO_COPY_PLAYABLE = ['aac', 'mp3'];
-        var ENGINE_FILES = ['ffmpeg.js', '814.ffmpeg.js', 'util.js', 'ffmpeg-core.js', 'ffmpeg-core.wasm'];
         var OK_EXT = ['mpg', 'mpeg', 'vob', 'm2v'];
 
         var $ = function (id) { return document.getElementById(id); };
@@ -507,76 +518,71 @@
           });
         }
 
-        // Preflight for the bundled engine set: if a file is missing on the
-        // host (e.g. only index.html was copied to GitHub Pages), the worker
-        // would otherwise hang silently at startup. A 404 here names the
-        // exact URL. Non-404 HEAD failures are ignored (some hosts refuse
-        // HEAD); the real load below is the fallback check.
-        function checkBundledFiles(base) {
-          var checks = ENGINE_FILES.map(function (name) {
-            var url = base + name;
+        // Preflight ONE engine set: HEAD-check every file of the set,
+        // the worker included. If even one file is missing on the host
+        // (e.g. only index.html was copied to GitHub Pages), the attempt
+        // fails here — load() is never called with a half-missing set,
+        // which is what used to hang silently for 90 seconds — and the
+        // caller moves on to the next set. A HEAD network error also
+        // fails the set (the real fetch would fail the same way). The
+        // first missing file, in set order, is the one named.
+        function preflightSet(src) {
+          var urls = [src.ffmpegJS, src.workerJS, src.utilJS, src.coreJS, src.coreWasm];
+          var checks = urls.map(function (url) {
             return fetch(url, { method: 'HEAD' }).then(function (res) {
-              if (res.status === 404 || res.status === 410) {
-                throw new Error('同梱エンジンファイルが見つかりません(404): ' + url + ' — CDNからの読み込みに切り替えます。');
-              }
-            }).catch(function (err) {
-              if (err && String(err.message || '').indexOf('404') !== -1) throw err;
-              return null; // network/HEAD refusal: let the real load decide
+              return (!res.ok || res.status === 404 || res.status === 410)
+                ? { url: url, problem: 'HTTP ' + res.status }
+                : null;
+            }, function (err) {
+              return { url: url, problem: '接続失敗(' + (err && err.message ? err.message : err) + ')' };
             });
           });
-          return Promise.all(checks);
-        }
-
-        // Load whichever library globals (FFmpegWASM / FFmpegUtil) are
-        // missing — e.g. when only index.html was deployed and the bundled
-        // <script> tags 404'd — from the pinned CDN builds, jsdelivr first,
-        // then unpkg. Records which CDN ffmpeg.js came from in libCDN,
-        // because the library resolves its worker relative to that URL.
-        function ensureLibs() {
-          if (window.FFmpegWASM && window.FFmpegUtil) return Promise.resolve();
-          var i = 0;
-          function next() {
-            if (window.FFmpegWASM && window.FFmpegUtil) return Promise.resolve();
-            if (i >= LIB_CDNS.length) {
-              throw new Error('変換エンジン本体(ffmpeg.js / util.js)を読み込めませんでした(同梱ファイル / jsdelivr / unpkg のすべてで失敗)。通信環境を確認してください。');
+          return Promise.all(checks).then(function (results) {
+            for (var i = 0; i < results.length; i++) {
+              if (results[i]) {
+                throw new Error('エンジンファイルが揃っていません: ' + results[i].url + ' (' + results[i].problem + ') — この読み込み元では起動せず、次を試します。');
+              }
             }
-            var cdn = LIB_CDNS[i++];
-            var jobs = [];
-            if (!window.FFmpegWASM) {
-              jobs.push(loadScript(cdn.ffmpegURL).then(function () {
-                if (window.FFmpegWASM && !libCDN) libCDN = cdn;
-              }));
-            }
-            if (!window.FFmpegUtil) jobs.push(loadScript(cdn.utilURL));
-            return Promise.all(jobs).then(next, next);
-          }
-          return next();
-        }
-
-        // Worker transport for the CDN case. The UMD library spawns its
-        // worker (814.ffmpeg.js) from the same directory ffmpeg.js came
-        // from; when that is a CDN, the URL is cross-origin and the Worker
-        // constructor refuses it, so load() would never start. Fetch the
-        // worker script from the same CDN and hand it to the constructor
-        // as a blob URL via a one-shot Worker bridge (loadEngine below).
-        // Passing the blob as classWorkerURL does NOT work: the library
-        // forces {type:'module'} for classWorkerURL, while 814.ffmpeg.js
-        // is a classic script that loads the core with importScripts(),
-        // which throws in module workers.
-        var workerBlobURL = null;
-        function prepareWorkerBridge() {
-          if (!libCDN) return Promise.resolve(); // bundled lib: same-origin worker, no bridge needed
-          if (workerBlobURL) return Promise.resolve();
-          return fetchBlobURL(libCDN.ffmpegBase + '814.ffmpeg.js', 'text/javascript').then(function (u) {
-            workerBlobURL = u;
           });
         }
 
-        // ffmpeg.load() constructs its Worker synchronously; swap in a
-        // bridge constructor for just that call so the cross-origin
-        // 814.ffmpeg.js URL is replaced by the pre-fetched blob URL
-        // (classic worker, options untouched). Restored immediately after.
-        function loadEngine(instance, config) {
+        // Make the library globals (FFmpegWASM / FFmpegUtil) come from
+        // THIS set. When the set differs from the one that provided the
+        // current globals, ffmpeg.js is loaded again from this set: the
+        // UMD recomputes its worker location from the script URL it was
+        // loaded with, so the worker it would spawn belongs to the same
+        // set as everything else. (Letting the globals stay with an
+        // earlier set while the core switched was the GitHub Pages
+        // hang: the worker URL pointed at a bundled file that does not
+        // exist there, and load() waited forever.) util is loaded the
+        // same way when it is missing or from another set.
+        function ensureLibsForSet(idx, src) {
+          var needFFmpeg = !(window.FFmpegWASM && libSourceIdx === idx);
+          var needUtil = !(window.FFmpegUtil && libSourceIdx === idx);
+          if (!needFFmpeg && !needUtil) return Promise.resolve();
+          var jobs = [];
+          if (needFFmpeg) jobs.push(loadScript(src.ffmpegJS));
+          if (needUtil) jobs.push(loadScript(src.utilJS));
+          return Promise.all(jobs).then(function () {
+            if (!window.FFmpegWASM) throw new Error('ffmpeg.js を読み込んでも FFmpegWASM が定義されませんでした: ' + src.ffmpegJS);
+            if (!window.FFmpegUtil) throw new Error('util を読み込んでも FFmpegUtil が定義されませんでした: ' + src.utilJS);
+            libSourceIdx = idx;
+          });
+        }
+
+        // ffmpeg.load() constructs its Worker synchronously from a URL
+        // derived from ffmpeg.js. Hand it a blob URL of THIS set's
+        // worker script instead, via a one-shot Worker bridge: swap the
+        // constructor for just that call and replace the first
+        // 814.ffmpeg.js construction with the pre-fetched blob (classic
+        // worker, options untouched). This both pins the worker to the
+        // chosen set and sidesteps the cross-origin Worker restriction
+        // when the set is a CDN. Passing the blob as classWorkerURL
+        // does NOT work: the library forces {type:'module'} for
+        // classWorkerURL, while 814.ffmpeg.js is a classic script that
+        // loads the core with importScripts(), which throws in module
+        // workers.
+        function loadEngine(instance, config, workerBlobURL) {
           if (!workerBlobURL) return instance.load(config);
           var OrigWorker = window.Worker;
           var used = false;
@@ -655,65 +661,62 @@
         }
 
         // onProgress(text, ratio|null): engine download/startup progress.
-        // The worker script (814.ffmpeg.js) sits next to ffmpeg.js, so with
-        // the bundled library the library locates it automatically. When
-        // the library itself came from a CDN, loadEngine() bridges the
-        // worker construction to a blob URL instead (see above).
+        // Each attempt uses ONE engine set end to end (see
+        // ENGINE_SOURCES): preflight the whole set (worker included),
+        // load the library scripts from the set, fetch the set's core /
+        // wasm / worker as blob URLs, and start the engine with exactly
+        // those. No URL is ever resolved from a different set than the
+        // chosen one, and load() is only called for a set whose files
+        // all answered the preflight.
         function loadFFmpeg(onProgress) {
           if (loaded) return Promise.resolve();
           var seq = loadSeq;
           function checkSeq() { if (seq !== loadSeq) throw new Error('__cancelled__'); }
-          return ensureLibs().then(function () {
-            // A failed worker-blob fetch must not abort the whole load:
-            // the attempts below surface the real error if the worker
-            // cannot be constructed at all.
-            return prepareWorkerBridge().then(function () {}, function () {});
-          }).then(function () {
-            var errors = [];
-            function attempt(idx) {
-              if (idx >= CORE_SOURCES.length) {
-                throw new Error('変換エンジン(FFmpeg、約32MB)の読み込みに失敗しました。試した読み込み元とエラー:\n' + errors.join('\n') + '\n通信環境を確認して、ページを再読み込みしてください。index.html だけを置いた場合は CDN から自動で読み込む設定のため、CDN(cdn.jsdelivr.net / unpkg.com)へ接続できる環境が必要です。');
-              }
-              checkSeq();
-              var src = CORE_SOURCES[idx];
-              var coreJsURL = src.base + 'ffmpeg-core.js';
-              var coreWasmURL = src.base + 'ffmpeg-core.wasm';
-              var workerLabel = libCDN ? libCDN.ffmpegBase + '814.ffmpeg.js' : ASSET_BASE + '814.ffmpeg.js';
-              var baseText = '変換エンジン(FFmpeg、約31MB)を読み込んでいます…[' + src.label + ']';
-              if (onProgress) onProgress(baseText, 0);
-              var got = { js: 0, wasm: 0 }, tot = { js: 0, wasm: 0 };
-              function rep() {
-                var g = got.js + got.wasm, t = tot.js + tot.wasm;
-                if (onProgress) onProgress(baseText, t > 0 ? g / t : null);
-              }
-              var blobURLs = [];
-              var preflight = (idx === 0) ? checkBundledFiles(src.base) : Promise.resolve();
-              return preflight.then(function () {
-                return withTimeout(Promise.all([
-                  fetchBlobURL(coreJsURL, 'text/javascript', function (r, t) { got.js = r; tot.js = t; rep(); }),
-                  fetchBlobURL(coreWasmURL, 'application/wasm', function (r, t) { got.wasm = r; tot.wasm = t; rep(); })
-                ]), 90000, '変換エンジンファイルの読み込み(' + coreJsURL + ' / ' + coreWasmURL + ')');
-              }).then(function (urls) {
-                blobURLs = urls;
-                checkSeq();
-                if (onProgress) onProgress('変換エンジンを起動しています…', 1);
-                ffmpeg = new window.FFmpegWASM.FFmpeg();
-                attachHandlers();
-                return withTimeout(Promise.resolve().then(function () {
-                  return loadEngine(ffmpeg, { coreURL: urls[0], wasmURL: urls[1] });
-                }), 90000, '変換エンジンの起動(コア: ' + coreJsURL + ' / ワーカー: ' + workerLabel + ')');
-              }).then(function () {
-                loaded = true;
-              }).catch(function (err) {
-                blobURLs.forEach(function (u) { URL.revokeObjectURL(u); });
-                if (ffmpeg) { try { ffmpeg.terminate(); } catch (e) {} ffmpeg = null; }
-                if (seq !== loadSeq) throw err;
-                errors.push('・' + src.label + ' [' + coreJsURL + ' / ' + coreWasmURL + ']: ' + (err && err.message ? err.message : err));
-                return attempt(idx + 1);
-              });
+          var errors = [];
+          function attempt(idx) {
+            if (idx >= ENGINE_SOURCES.length) {
+              throw new Error('変換エンジン(FFmpeg、約32MB)の読み込みに失敗しました。試した読み込み元とエラー:\n' + errors.join('\n') + '\n通信環境を確認して、ページを再読み込みしてください。index.html だけを置いた場合は CDN から自動で読み込む設定のため、CDN(cdn.jsdelivr.net / unpkg.com)へ接続できる環境が必要です。');
             }
-            return attempt(0);
-          });
+            checkSeq();
+            var src = ENGINE_SOURCES[idx];
+            var baseText = '変換エンジン(FFmpeg、約31MB)を読み込んでいます…[' + src.label + ']';
+            if (onProgress) onProgress(baseText, 0);
+            var got = { js: 0, wasm: 0 }, tot = { js: 0, wasm: 0 };
+            function rep() {
+              var g = got.js + got.wasm, t = tot.js + tot.wasm;
+              if (onProgress) onProgress(baseText, t > 0 ? g / t : null);
+            }
+            var blobURLs = [];
+            return preflightSet(src).then(function () {
+              checkSeq();
+              return ensureLibsForSet(idx, src);
+            }).then(function () {
+              checkSeq();
+              return withTimeout(Promise.all([
+                fetchBlobURL(src.coreJS, 'text/javascript', function (r, t) { got.js = r; tot.js = t; rep(); }),
+                fetchBlobURL(src.coreWasm, 'application/wasm', function (r, t) { got.wasm = r; tot.wasm = t; rep(); }),
+                fetchBlobURL(src.workerJS, 'text/javascript')
+              ]), 90000, '変換エンジンファイルの読み込み(コア: ' + src.coreJS + ' / ' + src.coreWasm + ' / ワーカー: ' + src.workerJS + ')');
+            }).then(function (urls) {
+              blobURLs = urls;
+              checkSeq();
+              if (onProgress) onProgress('変換エンジンを起動しています…', 1);
+              ffmpeg = new window.FFmpegWASM.FFmpeg();
+              attachHandlers();
+              return withTimeout(Promise.resolve().then(function () {
+                return loadEngine(ffmpeg, { coreURL: urls[0], wasmURL: urls[1] }, urls[2]);
+              }), 90000, '変換エンジンの起動(コア: ' + src.coreJS + ' / ワーカー: ' + src.workerJS + ')');
+            }).then(function () {
+              loaded = true;
+            }).catch(function (err) {
+              blobURLs.forEach(function (u) { URL.revokeObjectURL(u); });
+              if (ffmpeg) { try { ffmpeg.terminate(); } catch (e) {} ffmpeg = null; }
+              if (seq !== loadSeq) throw err;
+              errors.push('・' + src.label + ' [コア: ' + src.coreJS + ' / ' + src.coreWasm + ' / ワーカー: ' + src.workerJS + ']: ' + (err && err.message ? err.message : err));
+              return attempt(idx + 1);
+            });
+          }
+          return attempt(0);
         }
 
         /* ---------------- large-file helpers ---------------- */
