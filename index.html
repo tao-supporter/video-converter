@@ -159,12 +159,41 @@
         display: block;
         margin-bottom: 14px;
       }
+      .preview-error {
+        background: rgba(232,163,61,.12);
+        border: 1px solid rgba(232,163,61,.5);
+        color: #ffd9a0;
+        border-radius: 10px;
+        padding: 10px 12px;
+        font-size: 13px;
+        margin: 0 0 14px;
+      }
+      select.quality {
+        width: 100%;
+        min-height: 48px;
+        border-radius: 8px;
+        border: 1px solid var(--border);
+        background: var(--panel-2);
+        color: var(--text);
+        font-size: 15px;
+        font-weight: 600;
+        padding: 10px 12px;
+        font-family: inherit;
+      }
+      .mode-picker { margin-top: 14px; }
+      .mode-picker label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 6px; }
 
       .notes { margin-top: 24px; font-size: 13px; color: var(--muted); }
-      .notes h2 { font-size: 13px; color: var(--text); margin: 0 0 6px; }
       .notes ul { margin: 0; padding-left: 1.2em; }
       .notes li { margin: 4px 0; }
-      .notes .warn-line { color: var(--warn); }
+
+      .large-note { color: var(--warn); font-weight: 600; }
+      .extreme-note { color: var(--warn); font-size: 13px; margin: 4px 0 0; }
+
+      .part-item { border-top: 1px solid var(--border); padding: 14px 0 4px; }
+      .part-item:first-child { border-top: none; padding-top: 4px; }
+      .part-name { font-size: 14px; font-weight: 600; margin: 0 0 2px; word-break: break-all; }
+      .part-meta { font-size: 13px; color: var(--muted); margin: 0 0 10px; }
 
       @media (max-width: 480px) {
         h1 { font-size: 21px; }
@@ -177,9 +206,11 @@
     <main>
       <h1>MPG → MP4 無劣化変換</h1>
       <p class="lead">
-        .mpg / .mpeg 動画を、画質を一切落とさず iPhone・iPad で再生できる MP4 に変換します。
-        中身が再生可能なコーデックなら<strong>そのままコピー(最速)</strong>、MPEG-1/2 の場合は
-        <strong>H.264 ロスレス(CRF 0)+ ALAC</strong> で変換します。解像度・フレームレートは変更しません。
+        .mpg / .mpeg 動画を iPhone・iPad で再生できる MP4 に変換します。
+        中身が再生可能なコーデックなら<strong>そのままコピー(最速・完全無劣化)</strong>、MPEG-1/2 の場合は
+        標準の<strong>再生優先モード(H.264 Highプロファイル + AAC)</strong>で、見た目では判別できない画質のまま
+        iPhoneで確実に再生できる形式に変換します。解像度・フレームレートは変更しません。
+        数学的に完全な無劣化(CRF 0)が必要な場合は、解析後に「完全無劣化(保管用)」も選べます。
       </p>
 
       <!-- file select -->
@@ -196,11 +227,20 @@
         <table class="info">
           <tr><th>ファイル名</th><td id="infoName">—</td></tr>
           <tr><th>サイズ</th><td id="infoSize">—</td></tr>
+          <tr id="rowLarge" class="hidden"><th>大きいファイル</th><td><span class="large-note">大きいため分割して変換します</span><p class="extreme-note hidden" id="extremeWarn">このサイズはこの端末では変換できない可能性があります</p></td></tr>
           <tr id="rowDuration" class="hidden"><th>長さ</th><td id="infoDuration">—</td></tr>
           <tr id="rowVideo" class="hidden"><th>映像</th><td><span class="mono" id="infoVideo">—</span> <span id="infoVideoPlan"></span></td></tr>
           <tr id="rowAudio" class="hidden"><th>音声</th><td><span class="mono" id="infoAudio">—</span> <span id="infoAudioPlan"></span></td></tr>
           <tr id="rowMode" class="hidden"><th>変換方法</th><td><span id="infoMode"></span><p class="plan-detail" id="infoModeDetail"></p></td></tr>
         </table>
+        <div class="mode-picker hidden" id="modePicker">
+          <label for="qualitySelect">画質モード(コピーで済む素材では使いません)</label>
+          <select class="quality" id="qualitySelect">
+            <option value="playable" selected>再生優先(推奨)— iPhoneで再生できる形式に変換</option>
+            <option value="lossless">完全無劣化(保管用)— CRF 0 + ALAC</option>
+          </select>
+          <p class="plan-detail" id="qualityNote"></p>
+        </div>
         <div style="margin-top:14px" class="btn-row">
           <button type="button" class="btn-primary" id="probeBtn">コーデックを解析する</button>
           <button type="button" class="btn-primary hidden" id="convertBtn">変換を開始する</button>
@@ -222,29 +262,38 @@
       <!-- result -->
       <section class="panel hidden" id="resultPanel">
         <h2>変換が完了しました</h2>
-        <video class="preview" id="preview" controls playsinline></video>
-        <table class="info" style="margin-bottom:14px">
-          <tr><th>出力ファイル</th><td id="outName">—</td></tr>
-          <tr><th>サイズ</th><td id="outSize">—</td></tr>
-          <tr><th>変換方法</th><td id="outMode">—</td></tr>
-          <tr><th>所要時間</th><td id="outTime">—</td></tr>
-        </table>
-        <div class="btn-row">
-          <a class="btn btn-primary" id="downloadBtn" href="#" download>ダウンロード</a>
-          <button type="button" id="shareBtn">共有する</button>
-          <button type="button" id="againBtn">別のファイルを変換</button>
+        <div id="singleResult">
+          <video class="preview" id="preview" controls playsinline preload="metadata"></video>
+          <p class="preview-error hidden" id="previewError">このファイルはこのブラウザで再生できない形式です。共有/ダウンロードで保存して写真・ファイルアプリで開いてください。</p>
+          <table class="info" style="margin-bottom:14px">
+            <tr><th>出力ファイル</th><td id="outName">—</td></tr>
+            <tr><th>サイズ</th><td id="outSize">—</td></tr>
+            <tr><th>変換方法</th><td id="outMode">—</td></tr>
+            <tr><th>検証</th><td id="outVerify">—</td></tr>
+            <tr><th>所要時間</th><td id="outTime">—</td></tr>
+          </table>
+          <div class="btn-row">
+            <button type="button" class="btn-primary" id="shareBtn">共有して保存</button>
+            <a class="btn" id="downloadBtn" href="#" download>ダウンロード</a>
+          </div>
+          <p class="plan-detail">アプリ内ブラウザでは「ダウンロード」が効かないことがあります。その場合は「共有して保存」から写真アプリやファイルに保存してください。</p>
+        </div>
+        <div id="partsResult" class="hidden">
+          <p class="plan-detail" id="partsSummary" style="margin:0 0 6px"></p>
+          <div id="partsList"></div>
+        </div>
+        <div style="margin-top:14px">
+          <button type="button" id="againBtn" class="btn-block">別のファイルを変換</button>
         </div>
       </section>
 
       <div class="error hidden" id="errorBox" role="alert"></div>
 
       <div class="notes">
-        <h2>使う前に</h2>
         <ul>
-          <li>変換エンジン(FFmpeg、約31MB)はこのページに同梱されています。初回の読み込みには少し時間がかかりますが、進捗が表示されます。同梱ファイルが読めない場合は、予備の配信元(jsdelivr / unpkg)から自動で読み込みます。</li>
-          <li>コピーで済む素材は一瞬で終わります。MPEG-2 の変換が必要な素材は、ブラウザ内処理のためネイティブアプリより時間がかかります(目安として、数分の動画で数分程度かかることがあります)。</li>
-          <li class="warn-line">iPhone / iPad の Safari にはメモリ上限(約2GB)があり、大きなファイルは変換に失敗することがあります。失敗する場合は短いファイルで試すか、PCでの変換をおすすめします。</li>
-          <li>変換中はこのタブを開いたままにしてください。</li>
+          <li>変換は端末内だけで処理され、ファイルが外部に送信されることはありません</li>
+          <li>大きいファイルは自動で分割して変換します</li>
+          <li>初回のみ変換エンジン (約32MB) を読み込みます</li>
         </ul>
       </div>
     </main>
@@ -263,14 +312,27 @@
           { label: 'jsdelivr', base: 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/umd/' },
           { label: 'unpkg', base: 'https://unpkg.com/@ffmpeg/core@0.12.10/dist/umd/' }
         ];
-        var LIB_SOURCES = [
-          ASSET_BASE + 'ffmpeg.js',
-          'https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.15/dist/umd/ffmpeg.js',
-          'https://unpkg.com/@ffmpeg/ffmpeg@0.12.15/dist/umd/ffmpeg.js',
-          'https://cdnjs.cloudflare.com/ajax/libs/ffmpeg/0.12.15/umd/ffmpeg.min.js'
+        // Library (ffmpeg.js / util) sources, in priority order: bundled
+        // files first, then these CDNs. Versions are pinned: util is
+        // 0.12.1 on purpose — the 0.12.2 UMD build is broken upstream
+        // ("exports is not defined") and must never be used.
+        var LIB_CDNS = [
+          { label: 'jsdelivr',
+            ffmpegURL: 'https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.15/dist/umd/ffmpeg.js',
+            utilURL: 'https://cdn.jsdelivr.net/npm/@ffmpeg/util@0.12.1/dist/umd/index.js',
+            ffmpegBase: 'https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.15/dist/umd/' },
+          { label: 'unpkg',
+            ffmpegURL: 'https://unpkg.com/@ffmpeg/ffmpeg@0.12.15/dist/umd/ffmpeg.js',
+            utilURL: 'https://unpkg.com/@ffmpeg/util@0.12.1/dist/umd/index.js',
+            ffmpegBase: 'https://unpkg.com/@ffmpeg/ffmpeg@0.12.15/dist/umd/' }
         ];
+        // Which LIB_CDNS entry ffmpeg.js was actually loaded from (its
+        // worker is resolved relative to that URL). null = bundled files.
+        var libCDN = null;
         var VIDEO_PLAYABLE = ['h264', 'hevc', 'mpeg4'];
         var AUDIO_PLAYABLE = ['aac', 'mp3', 'alac'];
+        var AUDIO_COPY_PLAYABLE = ['aac', 'mp3'];
+        var ENGINE_FILES = ['ffmpeg.js', '814.ffmpeg.js', 'util.js', 'ffmpeg-core.js', 'ffmpeg-core.wasm'];
         var OK_EXT = ['mpg', 'mpeg', 'vob', 'm2v'];
 
         var $ = function (id) { return document.getElementById(id); };
@@ -280,6 +342,8 @@
         var barFill = $('barFill'), statusText = $('statusText'), statusSub = $('statusSub'), cancelBtn = $('cancelBtn');
         var resultPanel = $('resultPanel'), preview = $('preview'), downloadBtn = $('downloadBtn'), shareBtn = $('shareBtn'), againBtn = $('againBtn');
         var errorBox = $('errorBox');
+        var modePicker = $('modePicker'), qualitySelect = $('qualitySelect'), qualityNote = $('qualityNote'), previewError = $('previewError');
+        var singleResult = $('singleResult'), partsResult = $('partsResult'), partsList = $('partsList'), partsSummary = $('partsSummary');
 
         var ffmpeg = null;
         var loaded = false;
@@ -288,10 +352,18 @@
         var currentFile = null;
         var inputName = '';
         var outputName = 'output.mp4';
-        var plan = null;           // {mode, args, videoCodec, audioCodec, videoCopy, audioCopy, duration}
+        var plan = null;           // {mode, args, videoCodec, audioCodec, videoCopy, audioCopy, duration, quality}
+        var probedInfo = null;     // last probe result, used to rebuild the plan when the quality mode changes
         var logBuffer = null;      // string[] while probing
         var resultBlob = null;
         var resultURL = null;
+        // Large-file segmented conversion (memory countermeasure; the
+        // quality settings are never changed for large files).
+        var LARGE_THRESHOLD = 250 * 1024 * 1024;   // > 250MB: segmented mode
+        var EXTREME_THRESHOLD = 1024 * 1024 * 1024; // > 1GB: warn before starting
+        var resultParts = [];      // [{name, blob, url, verify}] in segmented mode
+        var segState = null;       // {index, count} while converting a part
+        var segmenting = false;    // true during a segmented conversion run
         var startTime = 0;
         var timerId = null;
 
@@ -330,11 +402,18 @@
           ffmpeg.on('progress', function (e) {
             if (!busy || cancelled) return;
             var p = e.progress;
-            if (isFinite(p)) {
-              p = Math.max(0, Math.min(1, p));
-              barFill.style.width = (p * 100).toFixed(1) + '%';
-              statusText.textContent = '変換中… ' + Math.round(p * 100) + '%';
+            if (!isFinite(p)) return;
+            p = Math.max(0, Math.min(1, p));
+            if (segState && segState.count > 0) {
+              // Overall progress: finished parts + this part's progress.
+              var overall = (segState.index + p) / segState.count;
+              barFill.style.width = (overall * 100).toFixed(1) + '%';
+              statusText.textContent = 'パート ' + (segState.index + 1) + ' / ' + segState.count + ' を変換中… ' + Math.round(p * 100) + '%';
+              statusSub.textContent = '全体 ' + Math.round(overall * 100) + '%';
+              return;
             }
+            barFill.style.width = (p * 100).toFixed(1) + '%';
+            statusText.textContent = '変換中… ' + Math.round(p * 100) + '%';
             if (plan && plan.duration && e.time) {
               var doneSec = e.time / 1000000;
               statusSub.textContent = fmtDuration(doneSec) + ' / ' + fmtDuration(plan.duration) + ' 処理済み';
@@ -347,29 +426,107 @@
         function loadScript(url) {
           return new Promise(function (resolve, reject) {
             var s = document.createElement('script');
+            var done = false;
+            var timer = setTimeout(function () {
+              if (done) return; done = true;
+              reject(new Error('読み込みがタイムアウトしました(30秒): ' + url));
+            }, 30000);
             s.src = url;
             s.async = true;
-            s.onload = function () { resolve(); };
-            s.onerror = function () { reject(new Error('読み込み失敗: ' + url)); };
+            s.onload = function () { if (done) return; done = true; clearTimeout(timer); resolve(); };
+            s.onerror = function () { if (done) return; done = true; clearTimeout(timer); reject(new Error('読み込み失敗: ' + url)); };
             document.head.appendChild(s);
           });
         }
 
-        // Load the FFmpeg library script from the first source that works
-        // (bundled file first, then CDN mirrors). Only needed if the bundled
-        // <script> tags did not produce the global.
+        // Preflight for the bundled engine set: if a file is missing on the
+        // host (e.g. only index.html was copied to GitHub Pages), the worker
+        // would otherwise hang silently at startup. A 404 here names the
+        // exact URL. Non-404 HEAD failures are ignored (some hosts refuse
+        // HEAD); the real load below is the fallback check.
+        function checkBundledFiles(base) {
+          var checks = ENGINE_FILES.map(function (name) {
+            var url = base + name;
+            return fetch(url, { method: 'HEAD' }).then(function (res) {
+              if (res.status === 404 || res.status === 410) {
+                throw new Error('同梱エンジンファイルが見つかりません(404): ' + url + ' — CDNからの読み込みに切り替えます。');
+              }
+            }).catch(function (err) {
+              if (err && String(err.message || '').indexOf('404') !== -1) throw err;
+              return null; // network/HEAD refusal: let the real load decide
+            });
+          });
+          return Promise.all(checks);
+        }
+
+        // Load whichever library globals (FFmpegWASM / FFmpegUtil) are
+        // missing — e.g. when only index.html was deployed and the bundled
+        // <script> tags 404'd — from the pinned CDN builds, jsdelivr first,
+        // then unpkg. Records which CDN ffmpeg.js came from in libCDN,
+        // because the library resolves its worker relative to that URL.
         function ensureLibs() {
-          if (window.FFmpegWASM) return Promise.resolve();
+          if (window.FFmpegWASM && window.FFmpegUtil) return Promise.resolve();
           var i = 0;
           function next() {
-            if (window.FFmpegWASM) return Promise.resolve();
-            if (i >= LIB_SOURCES.length) {
-              throw new Error('変換エンジン本体(ffmpeg.js)を読み込めませんでした(同梱ファイル / jsdelivr / unpkg / cdnjs のすべてで失敗)。通信環境を確認してください。');
+            if (window.FFmpegWASM && window.FFmpegUtil) return Promise.resolve();
+            if (i >= LIB_CDNS.length) {
+              throw new Error('変換エンジン本体(ffmpeg.js / util.js)を読み込めませんでした(同梱ファイル / jsdelivr / unpkg のすべてで失敗)。通信環境を確認してください。');
             }
-            var url = LIB_SOURCES[i++];
-            return loadScript(url).then(next, next);
+            var cdn = LIB_CDNS[i++];
+            var jobs = [];
+            if (!window.FFmpegWASM) {
+              jobs.push(loadScript(cdn.ffmpegURL).then(function () {
+                if (window.FFmpegWASM && !libCDN) libCDN = cdn;
+              }));
+            }
+            if (!window.FFmpegUtil) jobs.push(loadScript(cdn.utilURL));
+            return Promise.all(jobs).then(next, next);
           }
           return next();
+        }
+
+        // Worker transport for the CDN case. The UMD library spawns its
+        // worker (814.ffmpeg.js) from the same directory ffmpeg.js came
+        // from; when that is a CDN, the URL is cross-origin and the Worker
+        // constructor refuses it, so load() would never start. Fetch the
+        // worker script from the same CDN and hand it to the constructor
+        // as a blob URL via a one-shot Worker bridge (loadEngine below).
+        // Passing the blob as classWorkerURL does NOT work: the library
+        // forces {type:'module'} for classWorkerURL, while 814.ffmpeg.js
+        // is a classic script that loads the core with importScripts(),
+        // which throws in module workers.
+        var workerBlobURL = null;
+        function prepareWorkerBridge() {
+          if (!libCDN) return Promise.resolve(); // bundled lib: same-origin worker, no bridge needed
+          if (workerBlobURL) return Promise.resolve();
+          return fetchBlobURL(libCDN.ffmpegBase + '814.ffmpeg.js', 'text/javascript').then(function (u) {
+            workerBlobURL = u;
+          });
+        }
+
+        // ffmpeg.load() constructs its Worker synchronously; swap in a
+        // bridge constructor for just that call so the cross-origin
+        // 814.ffmpeg.js URL is replaced by the pre-fetched blob URL
+        // (classic worker, options untouched). Restored immediately after.
+        function loadEngine(instance, config) {
+          if (!workerBlobURL) return instance.load(config);
+          var OrigWorker = window.Worker;
+          var used = false;
+          function BridgedWorker(url, options) {
+            var href = String(url);
+            if (!used && href.indexOf('blob:') !== 0 && /\/814\.ffmpeg\.js($|[?#])/.test(href)) {
+              used = true;
+              return new OrigWorker(workerBlobURL, options);
+            }
+            return new OrigWorker(url, options);
+          }
+          BridgedWorker.prototype = OrigWorker.prototype;
+          window.Worker = BridgedWorker;
+          try {
+            return instance.load(config);
+          } finally {
+            window.Worker = OrigWorker;
+          }
         }
 
         // fetch() with byte progress, returned as a blob URL.
@@ -417,22 +574,30 @@
         }
 
         // onProgress(text, ratio|null): engine download/startup progress.
-        // The worker script (814.ffmpeg.js) sits next to ffmpeg.js, so the
-        // library locates it automatically — no classWorkerURL is passed
-        // (passing one would switch the worker to module mode and break
-        // importScripts() of the UMD core).
+        // The worker script (814.ffmpeg.js) sits next to ffmpeg.js, so with
+        // the bundled library the library locates it automatically. When
+        // the library itself came from a CDN, loadEngine() bridges the
+        // worker construction to a blob URL instead (see above).
         function loadFFmpeg(onProgress) {
           if (loaded) return Promise.resolve();
           var seq = loadSeq;
           function checkSeq() { if (seq !== loadSeq) throw new Error('__cancelled__'); }
           return ensureLibs().then(function () {
+            // A failed worker-blob fetch must not abort the whole load:
+            // the attempts below surface the real error if the worker
+            // cannot be constructed at all.
+            return prepareWorkerBridge().then(function () {}, function () {});
+          }).then(function () {
             var errors = [];
             function attempt(idx) {
               if (idx >= CORE_SOURCES.length) {
-                throw new Error('変換エンジン(FFmpeg、約31MB)の読み込みに失敗しました。試した読み込み元とエラー:\n' + errors.join('\n'));
+                throw new Error('変換エンジン(FFmpeg、約32MB)の読み込みに失敗しました。試した読み込み元とエラー:\n' + errors.join('\n') + '\n通信環境を確認して、ページを再読み込みしてください。index.html だけを置いた場合は CDN から自動で読み込む設定のため、CDN(cdn.jsdelivr.net / unpkg.com)へ接続できる環境が必要です。');
               }
               checkSeq();
               var src = CORE_SOURCES[idx];
+              var coreJsURL = src.base + 'ffmpeg-core.js';
+              var coreWasmURL = src.base + 'ffmpeg-core.wasm';
+              var workerLabel = libCDN ? libCDN.ffmpegBase + '814.ffmpeg.js' : ASSET_BASE + '814.ffmpeg.js';
               var baseText = '変換エンジン(FFmpeg、約31MB)を読み込んでいます…[' + src.label + ']';
               if (onProgress) onProgress(baseText, 0);
               var got = { js: 0, wasm: 0 }, tot = { js: 0, wasm: 0 };
@@ -441,27 +606,77 @@
                 if (onProgress) onProgress(baseText, t > 0 ? g / t : null);
               }
               var blobURLs = [];
-              return Promise.all([
-                fetchBlobURL(src.base + 'ffmpeg-core.js', 'text/javascript', function (r, t) { got.js = r; tot.js = t; rep(); }),
-                fetchBlobURL(src.base + 'ffmpeg-core.wasm', 'application/wasm', function (r, t) { got.wasm = r; tot.wasm = t; rep(); })
-              ]).then(function (urls) {
+              var preflight = (idx === 0) ? checkBundledFiles(src.base) : Promise.resolve();
+              return preflight.then(function () {
+                return withTimeout(Promise.all([
+                  fetchBlobURL(coreJsURL, 'text/javascript', function (r, t) { got.js = r; tot.js = t; rep(); }),
+                  fetchBlobURL(coreWasmURL, 'application/wasm', function (r, t) { got.wasm = r; tot.wasm = t; rep(); })
+                ]), 90000, '変換エンジンファイルの読み込み(' + coreJsURL + ' / ' + coreWasmURL + ')');
+              }).then(function (urls) {
                 blobURLs = urls;
                 checkSeq();
                 if (onProgress) onProgress('変換エンジンを起動しています…', 1);
                 ffmpeg = new window.FFmpegWASM.FFmpeg();
                 attachHandlers();
-                return withTimeout(ffmpeg.load({ coreURL: urls[0], wasmURL: urls[1] }), 150000, '変換エンジンの起動');
+                return withTimeout(Promise.resolve().then(function () {
+                  return loadEngine(ffmpeg, { coreURL: urls[0], wasmURL: urls[1] });
+                }), 90000, '変換エンジンの起動(コア: ' + coreJsURL + ' / ワーカー: ' + workerLabel + ')');
               }).then(function () {
                 loaded = true;
               }).catch(function (err) {
                 blobURLs.forEach(function (u) { URL.revokeObjectURL(u); });
                 if (ffmpeg) { try { ffmpeg.terminate(); } catch (e) {} ffmpeg = null; }
                 if (seq !== loadSeq) throw err;
-                errors.push('・' + src.label + ': ' + (err && err.message ? err.message : err));
+                errors.push('・' + src.label + ' [' + coreJsURL + ' / ' + coreWasmURL + ']: ' + (err && err.message ? err.message : err));
                 return attempt(idx + 1);
               });
             }
             return attempt(0);
+          });
+        }
+
+        /* ---------------- large-file helpers ---------------- */
+
+        function isLargeFile() { return !!(currentFile && currentFile.size > LARGE_THRESHOLD); }
+        function isExtremeFile() { return !!(currentFile && currentFile.size > EXTREME_THRESHOLD); }
+        // Shorter segments for bigger inputs, so a single part (input
+        // segment + output + work buffers) stays well under the heap cap.
+        function segmentTimeForSize(bytes) {
+          if (bytes > 1024 * 1024 * 1024) return 60;
+          if (bytes > 500 * 1024 * 1024) return 90;
+          return 180;
+        }
+        function deleteFileSafe(name) {
+          if (!ffmpeg) return Promise.resolve();
+          return ffmpeg.deleteFile(name).catch(function () {});
+        }
+        // Terminate the current instance and load a fresh one. MEMFS lives
+        // inside the WASM heap, so everything needed later must already
+        // have been read out to Blobs before calling this.
+        function restartFFmpeg() {
+          try { if (ffmpeg) ffmpeg.terminate(); } catch (e) {}
+          ffmpeg = null;
+          loaded = false;
+          return loadFFmpeg(function (t, r) {
+            statusText.textContent = t + (r != null && r < 1 ? ' ' + Math.round(r * 100) + '%' : '');
+          });
+        }
+        function readFileToBlob(name, type) {
+          return ffmpeg.readFile(name).then(function (data) {
+            var srcBytes = data instanceof Uint8Array ? data : new Uint8Array(data);
+            var plainCopy = new Uint8Array(srcBytes.length);
+            plainCopy.set(srcBytes);
+            return new Blob([plainCopy], { type: type });
+          });
+        }
+        function checkCancelled() { if (cancelled) throw new Error('__cancelled__'); }
+        function blobToUint8Array(blob) {
+          if (blob.arrayBuffer) return blob.arrayBuffer().then(function (buf) { return new Uint8Array(buf); });
+          return new Promise(function (resolve, reject) {
+            var r = new FileReader();
+            r.onload = function () { resolve(new Uint8Array(r.result)); };
+            r.onerror = function () { reject(r.error || new Error('読み込みに失敗しました')); };
+            r.readAsArrayBuffer(blob);
           });
         }
 
@@ -481,13 +696,22 @@
             return;
           }
           cleanupResult();
+          cleanupParts();
           plan = null;
+          probedInfo = null;
+          modePicker.classList.add('hidden');
           currentFile = file;
           inputName = 'input.' + ext;
           outputName = file.name.replace(/\.[^.]+$/, '') + '.mp4';
 
           $('infoName').textContent = file.name;
-          $('infoSize').textContent = fmtSize(file.size) + (file.size >= 1024 * 1024 * 1024 ? ' — 大きなファイルです。iPhone/iPadではメモリ上限で失敗することがあります' : '');
+          $('infoSize').textContent = fmtSize(file.size);
+          if (isLargeFile()) {
+            $('rowLarge').classList.remove('hidden');
+            $('extremeWarn').classList.toggle('hidden', !isExtremeFile());
+          } else {
+            $('rowLarge').classList.add('hidden');
+          }
           $('rowDuration').classList.add('hidden');
           $('rowVideo').classList.add('hidden');
           $('rowAudio').classList.add('hidden');
@@ -530,11 +754,17 @@
           var dm = /Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)/.exec(logText);
           if (dm) duration = (+dm[1]) * 3600 + (+dm[2]) * 60 + (+dm[3]);
           var re = /Stream #\d+:\d+(?:\[[^\]]*\])?(?:\([^)]*\))?\s*:\s*(Video|Audio):\s*([A-Za-z0-9_]+)([^\n]*)/g;
+          var PROFILES = ['High 4:4:4 Predictive', 'High 4:2:2', 'High 10', 'Constrained Baseline', 'Baseline', 'Main', 'High'];
           var m;
           while ((m = re.exec(logText)) !== null) {
             if (m[1] === 'Video' && !video) {
               var res = /(\d{2,5})x(\d{2,5})/.exec(m[4] || '');
-              video = { codec: m[2].toLowerCase(), res: res ? res[1] + '×' + res[2] : '' };
+              var seg = m[0] || '';
+              var profile = '';
+              for (var pi = 0; pi < PROFILES.length; pi++) {
+                if (seg.indexOf('(' + PROFILES[pi] + ')') !== -1 || seg.indexOf('(' + PROFILES[pi] + ' ') !== -1) { profile = PROFILES[pi]; break; }
+              }
+              video = { codec: m[2].toLowerCase(), res: res ? res[1] + '×' + res[2] : '', profile: profile };
             } else if (m[1] === 'Audio' && !audio) {
               var sr = /(\d+)\s*Hz/.exec(m[4] || '');
               audio = { codec: m[2].toLowerCase(), sr: sr ? sr[1] + ' Hz' : '' };
@@ -543,38 +773,105 @@
           return { video: video, audio: audio, duration: duration };
         }
 
-        function buildPlan(info) {
+        function buildPlan(info, quality) {
           var v = info.video, a = info.audio;
           var videoCopy = VIDEO_PLAYABLE.indexOf(v.codec) !== -1;
-          var audioCopy = !a || AUDIO_PLAYABLE.indexOf(a.codec) !== -1;
+          // Copy mode keeps the old rule (alac audio may stay as-is).
+          var audioCopyAny = !a || AUDIO_PLAYABLE.indexOf(a.codec) !== -1;
           var args;
           var modeKey, modeLabel, detail;
-          if (videoCopy && audioCopy) {
-            args = ['-y', '-i', inputName, '-c', 'copy', '-movflags', '+faststart', 'output.mp4'];
+          var audioCopy = audioCopyAny;
+          if (videoCopy && audioCopyAny) {
+            args = ['-y', '-i', inputName, '-threads', '1', '-c', 'copy', '-movflags', '+faststart', 'output.mp4'];
             modeKey = 'copy'; modeLabel = 'ストリームコピー';
-            detail = '映像・音声とも再エンコードせずそのままコピーします。<b>完全無劣化で最速</b>です。';
-          } else {
-            args = ['-y', '-i', inputName];
+            detail = '映像・音声とも再エンコードせずそのままコピーします。<b>完全無劣化で最速</b>です。画質モードは使いません。';
+          } else if (quality === 'lossless') {
+            args = ['-y', '-i', inputName, '-threads', '1'];
             if (videoCopy) {
               args.push('-c:v', 'copy');
             } else {
               args.push('-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '0', '-pix_fmt', 'yuv420p', '-tag:v', 'avc1');
             }
-            if (a) args.push('-c:a', audioCopy ? 'copy' : 'alac');
+            if (a) args.push('-c:a', audioCopyAny ? 'copy' : 'alac');
             args.push('-movflags', '+faststart', 'output.mp4');
             modeKey = 'lossless';
-            modeLabel = videoCopy ? '音声のみロスレス変換' : 'ロスレス変換';
+            modeLabel = videoCopy ? '音声のみロスレス変換(保管用)' : '完全無劣化変換(保管用)';
             detail = '映像: <b>' + (videoCopy ? 'コピー(無劣化)' : 'H.264 ロスレス変換(CRF 0)') + '</b>' +
-                     (a ? ' / 音声: <b>' + (audioCopy ? 'コピー(無劣化)' : 'ALAC ロスレス変換') + '</b>' : ' / 音声: なし') +
-                     '。解像度・フレームレートは変更しません。';
+                     (a ? ' / 音声: <b>' + (audioCopyAny ? 'コピー(無劣化)' : 'ALAC ロスレス変換') + '</b>' : ' / 音声: なし') +
+                     '。解像度・フレームレートは変更しません。<b>iPhone標準プレイヤーやこのページのプレビューでは再生できない場合があります。PC等での保管用です。</b>';
+          } else {
+            // Playable (default): H.264 High profile so iPhone/Safari hardware
+            // decoders accept it. veryfast (not ultrafast) keeps CABAC on, so
+            // x264 actually signals High instead of Constrained Baseline.
+            audioCopy = !a || AUDIO_COPY_PLAYABLE.indexOf(a.codec) !== -1;
+            args = ['-y', '-i', inputName, '-threads', '1'];
+            if (videoCopy) {
+              args.push('-c:v', 'copy');
+            } else {
+              args.push('-c:v', 'libx264', '-preset', 'veryfast', '-crf', '10', '-profile:v', 'high', '-pix_fmt', 'yuv420p', '-tag:v', 'avc1');
+            }
+            if (a) {
+              if (audioCopy) args.push('-c:a', 'copy');
+              else args.push('-c:a', 'aac', '-b:a', '320k');
+            }
+            args.push('-movflags', '+faststart', 'output.mp4');
+            modeKey = 'playable';
+            modeLabel = videoCopy ? '音声のみ変換(再生優先)' : '再生優先変換';
+            detail = '映像: <b>' + (videoCopy ? 'コピー(無劣化)' : 'H.264 Highプロファイル変換(CRF 10、元素材と判別できない画質)') + '</b>' +
+                     (a ? ' / 音声: <b>' + (audioCopy ? 'コピー(無劣化)' : 'AAC 320kbps 変換') + '</b>' : ' / 音声: なし') +
+                     '。解像度・フレームレートは変更しません。iPhone標準プレイヤーとこのページのプレビューで再生できます。';
           }
           return {
             videoCodec: v.codec, audioCodec: a ? a.codec : null,
             videoCopy: videoCopy, audioCopy: audioCopy,
             duration: info.duration, args: args,
-            modeKey: modeKey, modeLabel: modeLabel, detail: detail
+            modeKey: modeKey, modeLabel: modeLabel, detail: detail,
+            quality: modeKey === 'copy' ? 'copy' : (quality === 'lossless' ? 'lossless' : 'playable')
           };
         }
+
+        function qualityNoteText(quality) {
+          if (quality === 'lossless') {
+            return '完全無劣化(保管用): 映像は H.264 ロスレス(CRF 0)、音声は ALAC で変換します。ただし出力は High 4:4:4 プロファイルになるため、iPhone標準プレイヤーやこのページのプレビューでは再生できない場合があります。PC等での保管用です。';
+          }
+          return '再生優先(推奨): 映像は H.264 Highプロファイル(CRF 10)、音声は AAC 320kbps(元がAAC/MP3ならコピー)で変換します。元素材と判別できない画質(実測 SSIM 0.999)のまま、iPhoneで確実に再生できます。';
+        }
+
+        function renderPlan() {
+          if (!probedInfo || !plan) return;
+          var info = probedInfo;
+          if (info.duration) {
+            $('infoDuration').textContent = fmtDuration(info.duration);
+            $('rowDuration').classList.remove('hidden');
+          }
+          $('infoVideo').textContent = info.video.codec + (info.video.profile ? ' (' + info.video.profile + ')' : '') + (info.video.res ? '  ' + info.video.res : '');
+          chip($('infoVideoPlan'), plan.videoCopy, plan.videoCopy ? 'コピー可' : '変換が必要');
+          $('rowVideo').classList.remove('hidden');
+          if (info.audio) {
+            $('infoAudio').textContent = info.audio.codec + (info.audio.sr ? '  ' + info.audio.sr : '');
+            chip($('infoAudioPlan'), plan.audioCopy, plan.audioCopy ? 'コピー可' : '変換が必要');
+          } else {
+            $('infoAudio').textContent = '音声なし';
+            $('infoAudioPlan').innerHTML = '';
+          }
+          $('rowAudio').classList.remove('hidden');
+          var modeEl = $('infoMode');
+          modeEl.innerHTML = '';
+          var c = document.createElement('span');
+          c.className = 'chip ' + (plan.modeKey === 'copy' ? 'chip-copy' : 'chip-lossless');
+          c.textContent = plan.modeLabel;
+          modeEl.appendChild(c);
+          $('infoModeDetail').innerHTML = plan.detail;
+          $('rowMode').classList.remove('hidden');
+          qualityNote.textContent = qualityNoteText(qualitySelect.value);
+          modePicker.classList.remove('hidden');
+        }
+
+        qualitySelect.addEventListener('change', function () {
+          if (!probedInfo || busy) return;
+          plan = buildPlan(probedInfo, qualitySelect.value);
+          renderPlan();
+        });
 
         function chip(el, isCopy, text) {
           el.innerHTML = '';
@@ -618,31 +915,9 @@
               if (!info.video) {
                 throw new Error('映像ストリームが見つかりませんでした。対応していないファイルの可能性があります。');
               }
-              plan = buildPlan(info);
-              // info panel update
-              if (info.duration) {
-                $('infoDuration').textContent = fmtDuration(info.duration);
-                $('rowDuration').classList.remove('hidden');
-              }
-              $('infoVideo').textContent = info.video.codec + (info.video.res ? '  ' + info.video.res : '');
-              chip($('infoVideoPlan'), plan.videoCopy, plan.videoCopy ? 'コピー可' : '変換が必要');
-              $('rowVideo').classList.remove('hidden');
-              if (info.audio) {
-                $('infoAudio').textContent = info.audio.codec + (info.audio.sr ? '  ' + info.audio.sr : '');
-                chip($('infoAudioPlan'), plan.audioCopy, plan.audioCopy ? 'コピー可' : '変換が必要');
-              } else {
-                $('infoAudio').textContent = '音声なし';
-                $('infoAudioPlan').innerHTML = '';
-              }
-              $('rowAudio').classList.remove('hidden');
-              var modeEl = $('infoMode');
-              modeEl.innerHTML = '';
-              var c = document.createElement('span');
-              c.className = 'chip ' + (plan.modeKey === 'copy' ? 'chip-copy' : 'chip-lossless');
-              c.textContent = plan.modeLabel;
-              modeEl.appendChild(c);
-              $('infoModeDetail').innerHTML = plan.detail;
-              $('rowMode').classList.remove('hidden');
+              probedInfo = info;
+              plan = buildPlan(info, qualitySelect.value);
+              renderPlan();
 
               probeBtn.classList.add('hidden');
               convertBtn.classList.remove('hidden');
@@ -669,14 +944,40 @@
             if (busy) {
               var el = $('statusSub');
               // keep progress sub-line if it has stream info; append elapsed on title side
-              progressTitle.textContent = (plan && plan.modeKey === 'copy' ? 'コピー中…' : '変換中…') + '(経過 ' + fmtElapsed(Date.now() - startTime) + ')';
+              progressTitle.textContent = (segmenting ? '分割変換中…' : (plan && plan.modeKey === 'copy' ? 'コピー中…' : '変換中…')) + '(経過 ' + fmtElapsed(Date.now() - startTime) + ')';
             }
           }, 500);
         }
         function stopTimer() { if (timerId) { clearInterval(timerId); timerId = null; } }
 
+        // Post-conversion verification: never show "success" for an output
+        // that is empty, has no video stream, or (in playable mode) carries
+        // an H.264 profile iPhone/Safari cannot decode.
+        function verifyOutput() { return verifyOutputFile('output.mp4'); }
+
+        function verifyOutputFile(outName) {
+          statusText.textContent = '出力ファイルを検証しています…';
+          logBuffer = [];
+          return ffmpeg.exec(['-i', outName]).then(function () {
+            var text = (logBuffer || []).join('\n');
+            logBuffer = null;
+            var info = parseStreams(text);
+            if (!info.video) {
+              throw new Error('検証に失敗したため「成功」にはしませんでした: 出力ファイルに映像ストリームが見つかりませんでした。別の画質モードで試すか、短いファイルで試してください。');
+            }
+            if (plan && plan.quality === 'playable' && info.video.codec === 'h264') {
+              var allowed = ['High', 'Main', 'Baseline', 'Constrained Baseline'];
+              if (allowed.indexOf(info.video.profile || '') === -1) {
+                throw new Error('検証に失敗したため「成功」にはしませんでした: 出力映像のプロファイルが「' + (info.video.profile || '不明') + '」で、iPhoneで再生できない可能性があります。素材の映像がコピーされた場合は、コピー元自体が再生非対応プロファイルの可能性があります。');
+              }
+            }
+            return info;
+          });
+        }
+
         convertBtn.addEventListener('click', function () {
           if (!plan || busy) return;
+          if (isLargeFile()) { runSegmentedConvert(); return; }
           hideError();
           busy = true; cancelled = false;
           convertBtn.disabled = true;
@@ -689,36 +990,44 @@
           progressPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
           startTimer();
 
+          var verifiedInfo = null;
           ffmpeg.exec(plan.args)
             .then(function (code) {
               if (cancelled) return undefined;
               if (code !== 0) throw new Error('FFmpeg がエラーで終了しました(コード ' + code + ')。メモリ不足の可能性があります。');
+              return verifyOutput();
+            })
+            .then(function (info) {
+              if (cancelled) return undefined;
+              verifiedInfo = info;
               statusText.textContent = '出力を読み込んでいます…';
               return ffmpeg.readFile('output.mp4');
             })
             .then(function (data) {
               if (cancelled || !data) return;
-              resultBlob = new Blob([data.buffer ? data : new Uint8Array(data)], { type: 'video/mp4' });
-              if (resultBlob.size === 0) throw new Error('出力ファイルが空でした。変換に失敗した可能性があります。');
+              // Copy into a plain Uint8Array first: the readFile result may
+              // view wasm memory, and a Blob over that buffer can end up
+              // empty/corrupt in in-app browsers.
+              var srcBytes = data instanceof Uint8Array ? data : new Uint8Array(data);
+              var plainCopy = new Uint8Array(srcBytes.length);
+              plainCopy.set(srcBytes);
+              resultBlob = new Blob([plainCopy], { type: 'video/mp4' });
+              if (resultBlob.size === 0) throw new Error('出力ファイルが空でした。検証に失敗したため「成功」にはしませんでした。');
+              // Free the virtual FS immediately so no memory carries over.
+              deleteFileSafe(inputName);
+              deleteFileSafe('output.mp4');
               cleanupResult(true);
               resultURL = URL.createObjectURL(resultBlob);
+              previewError.classList.add('hidden');
               preview.src = resultURL;
               downloadBtn.href = resultURL;
               downloadBtn.setAttribute('download', outputName);
               $('outName').textContent = outputName;
               $('outSize').textContent = fmtSize(resultBlob.size);
               $('outMode').textContent = plan.modeLabel;
+              $('outVerify').textContent = '合格 — 映像 ' + verifiedInfo.video.codec + (verifiedInfo.video.profile ? ' (' + verifiedInfo.video.profile + ')' : '') + (verifiedInfo.video.res ? ' ' + verifiedInfo.video.res : '');
               $('outTime').textContent = fmtElapsed(Date.now() - startTime);
-              // share availability
-              var shareFile = null;
-              try { shareFile = new File([resultBlob], outputName, { type: 'video/mp4' }); } catch (e) { /* older browsers */ }
-              if (shareFile && navigator.canShare && navigator.canShare({ files: [shareFile] })) {
-                shareBtn.classList.remove('hidden');
-                shareBtn._file = shareFile;
-              } else {
-                shareBtn.classList.add('hidden');
-                shareBtn._file = null;
-              }
+              shareBtn.classList.remove('hidden');
               barFill.style.width = '100%';
               statusText.textContent = '完了しました';
               progressPanel.classList.add('hidden');
@@ -731,15 +1040,256 @@
               ffmpeg.deleteFile('output.mp4').catch(function () {});
             })
             .catch(function (err) {
+              logBuffer = null;
               busy = false;
               convertBtn.disabled = false;
               progressPanel.classList.add('hidden');
+              resultPanel.classList.add('hidden');
               if (!cancelled) {
                 showError('変換に失敗しました。大きなファイルでは iPhone/iPad のメモリ上限(約2GB)に当たった可能性があります。\n' + (err && err.message ? err.message : err));
               }
             })
             .then(function () { stopTimer(); });
         });
+
+        /* ---------------- segmented conversion (large files) ----------------
+           The input as a whole never coexists with a full-size output in
+           the WASM heap: split by stream copy first, drop the original,
+           then convert one small segment at a time with exactly the same
+           settings as the single-file path (plan.args, only the file
+           names differ). Each finished part is read out to a Blob and
+           both of its FS files are deleted, and the FFmpeg instance is
+           restarted per part so heap fragmentation resets. The parts are
+           delivered as separate playable MP4s and are never rejoined:
+           rejoining would load everything back into memory. */
+
+        function runSegmentedConvert() {
+          hideError();
+          busy = true; cancelled = false; segmenting = true;
+          convertBtn.disabled = true;
+          cleanupResult();
+          cleanupParts();
+          resultPanel.classList.add('hidden');
+          progressPanel.classList.remove('hidden');
+          progressTitle.textContent = '分割変換中…';
+          barFill.style.width = '0%';
+          statusText.textContent = '分割しています…';
+          statusSub.textContent = isExtremeFile() ? 'このサイズはこの端末では変換できない可能性があります' : '';
+          progressPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+          startTimer();
+
+          var originalExt = extOf(currentFile.name);
+          var segPattern = 'seg_%03d.' + originalExt;
+          var segInName = 'seg_input.' + originalExt;
+          var partOutName = 'part_output.mp4';
+          var base = currentFile.name.replace(/\.[^.]+$/, '');
+          var segTime = segmentTimeForSize(currentFile.size);
+          var segmentBlobs = [];
+          var totalParts = 0;
+
+          function pad3(n) { return ('00' + n).slice(-3); }
+
+          // (a) Stream-copy split into small segments (lossless, low memory).
+          var splitArgs = ['-y', '-i', inputName, '-threads', '1', '-c', 'copy',
+                           '-f', 'segment', '-segment_time', String(segTime),
+                           '-reset_timestamps', '1', segPattern];
+          ffmpeg.exec(splitArgs)
+            .then(function (code) {
+              checkCancelled();
+              if (code !== 0) throw new Error('分割に失敗しました(コード ' + code + ')。メモリ不足の可能性があります。');
+              // (b) Free the original input before anything else.
+              return deleteFileSafe(inputName);
+            })
+            .then(function () {
+              checkCancelled();
+              statusText.textContent = 'セグメントを取り出しています…';
+              if (ffmpeg.listDir) {
+                return ffmpeg.listDir('/').then(function (entries) {
+                  var names = [];
+                  (entries || []).forEach(function (en) {
+                    var nm = typeof en === 'string' ? en : (en && en.name);
+                    if (nm && /^seg_\d+\./.test(nm)) names.push(nm);
+                  });
+                  names.sort();
+                  return names;
+                }).catch(function () { return null; });
+              }
+              return null;
+            })
+            .then(function (names) {
+              checkCancelled();
+              if (names && names.length) {
+                // Extract every segment to a JS-side Blob, deleting each
+                // FS file as soon as it is out.
+                var chain = Promise.resolve();
+                names.forEach(function (nm) {
+                  chain = chain.then(function () {
+                    checkCancelled();
+                    return readFileToBlob(nm, '').then(function (b) {
+                      segmentBlobs.push(b);
+                      return deleteFileSafe(nm);
+                    });
+                  });
+                });
+                return chain;
+              }
+              // Fallback when listDir is unavailable: probe seg_000, 001, …
+              function probeNext(i) {
+                checkCancelled();
+                var nm = 'seg_' + pad3(i) + '.' + originalExt;
+                return readFileToBlob(nm, '').then(function (b) {
+                  segmentBlobs.push(b);
+                  return deleteFileSafe(nm).then(function () { return probeNext(i + 1); });
+                }, function () { return null; });
+              }
+              return probeNext(0);
+            })
+            .then(function () {
+              checkCancelled();
+              if (!segmentBlobs.length) throw new Error('分割したセグメントが見つかりませんでした。');
+              totalParts = segmentBlobs.length;
+              // Clean heap before converting: the split phase held the
+              // input and all segments in MEMFS at once.
+              return restartFFmpeg();
+            })
+            .then(function () {
+              // (c)-(e) Convert one segment at a time.
+              function nextPart(i) {
+                if (i >= totalParts) return Promise.resolve();
+                checkCancelled();
+                segState = { index: i, count: totalParts };
+                statusText.textContent = 'パート ' + (i + 1) + ' / ' + totalParts + ' を変換中…';
+                statusSub.textContent = '';
+                barFill.style.width = ((i / totalParts) * 100).toFixed(1) + '%';
+                var partArgs = plan.args.map(function (a) {
+                  if (a === inputName) return segInName;
+                  if (a === 'output.mp4') return partOutName;
+                  return a;
+                });
+                var segBlob = segmentBlobs[i];
+                segmentBlobs[i] = null; // release our reference once written in
+                return blobToUint8Array(segBlob)
+                  .then(function (bytes) {
+                    checkCancelled();
+                    return ffmpeg.writeFile(segInName, bytes);
+                  })
+                  .then(function () {
+                    checkCancelled();
+                    return ffmpeg.exec(partArgs);
+                  })
+                  .then(function (code) {
+                    checkCancelled();
+                    if (code !== 0) throw new Error('パート ' + (i + 1) + ' の変換に失敗しました(コード ' + code + ')。メモリ不足の可能性があります。');
+                    return verifyOutputFile(partOutName);
+                  })
+                  .then(function (info) {
+                    checkCancelled();
+                    // (d) Read the finished part out, then delete both FS files.
+                    return readFileToBlob(partOutName, 'video/mp4').then(function (blob) {
+                      if (blob.size === 0) throw new Error('パート ' + (i + 1) + ' の出力が空でした。');
+                      resultParts.push({
+                        name: base + '_part' + (i + 1) + '.mp4',
+                        blob: blob,
+                        url: null,
+                        verify: '合格 — 映像 ' + info.video.codec + (info.video.profile ? ' (' + info.video.profile + ')' : '') + (info.video.res ? ' ' + info.video.res : '')
+                      });
+                      return deleteFileSafe(segInName).then(function () { return deleteFileSafe(partOutName); });
+                    });
+                  })
+                  .then(function () {
+                    segState = null;
+                    if (cancelled) throw new Error('__cancelled__');
+                    // (e) Restart per part to reset heap fragmentation.
+                    if (i + 1 < totalParts) return restartFFmpeg();
+                    // Last part: shut the engine down to free the heap.
+                    try { if (ffmpeg) ffmpeg.terminate(); } catch (e) {}
+                    ffmpeg = null; loaded = false;
+                    return null;
+                  })
+                  .then(function () { return nextPart(i + 1); });
+              }
+              return nextPart(0);
+            })
+            .then(function () {
+              if (cancelled) return;
+              segState = null; segmenting = false;
+              busy = false;
+              convertBtn.disabled = false;
+              barFill.style.width = '100%';
+              progressPanel.classList.add('hidden');
+              renderPartsResult(totalParts);
+              resultPanel.classList.remove('hidden');
+              resultPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            })
+            .catch(function (err) {
+              segState = null; segmenting = false;
+              logBuffer = null;
+              busy = false;
+              convertBtn.disabled = false;
+              progressPanel.classList.add('hidden');
+              resultPanel.classList.add('hidden');
+              if (!cancelled && !(err && err.message === '__cancelled__')) {
+                showError('分割変換に失敗しました。パート ' + resultParts.length + ' までは完了していますが、この画面からは保存できません。\n' + (err && err.message ? err.message : err));
+                if (resultParts.length) renderPartsResult(totalParts || resultParts.length), resultPanel.classList.remove('hidden');
+              }
+            })
+            .then(function () { stopTimer(); });
+        }
+
+        // (f) Each part is a standalone playable MP4 with its own
+        // share / download controls. They are never rejoined.
+        function renderPartsResult(count) {
+          singleResult.classList.add('hidden');
+          partsResult.classList.remove('hidden');
+          var totalSize = 0;
+          resultParts.forEach(function (pt) { totalSize += pt.blob.size; });
+          partsSummary.textContent = count + '個のパートに分割して変換しました(変換方法: ' + plan.modeLabel + ' / 合計 ' + fmtSize(totalSize) + ' / 所要時間 ' + fmtElapsed(Date.now() - startTime) + ')。各パートは単体で再生できます。';
+          partsList.innerHTML = '';
+          resultParts.forEach(function (pt, idx) {
+            if (!pt.url) pt.url = URL.createObjectURL(pt.blob);
+            var wrap = document.createElement('div');
+            wrap.className = 'part-item';
+            var vid = document.createElement('video');
+            vid.className = 'preview';
+            vid.controls = true;
+            vid.playsInline = true;
+            vid.preload = 'metadata';
+            vid.src = pt.url;
+            var nameEl = document.createElement('p');
+            nameEl.className = 'part-name';
+            nameEl.textContent = pt.name;
+            var meta = document.createElement('p');
+            meta.className = 'part-meta';
+            meta.textContent = fmtSize(pt.blob.size) + ' / ' + pt.verify;
+            var row = document.createElement('div');
+            row.className = 'btn-row';
+            var shareB = document.createElement('button');
+            shareB.type = 'button';
+            shareB.className = 'btn-primary';
+            shareB.textContent = '共有して保存';
+            shareB.addEventListener('click', function () { shareBlobFile(pt.blob, pt.name, null); });
+            var dl = document.createElement('a');
+            dl.className = 'btn';
+            dl.textContent = 'ダウンロード';
+            dl.href = pt.url;
+            dl.setAttribute('download', pt.name);
+            row.appendChild(shareB);
+            row.appendChild(dl);
+            wrap.appendChild(vid);
+            wrap.appendChild(nameEl);
+            wrap.appendChild(meta);
+            wrap.appendChild(row);
+            partsList.appendChild(wrap);
+          });
+        }
+
+        function cleanupParts() {
+          resultParts.forEach(function (pt) { if (pt.url) URL.revokeObjectURL(pt.url); });
+          resultParts = [];
+          if (partsList) partsList.innerHTML = '';
+          if (partsResult) partsResult.classList.add('hidden');
+          if (singleResult) singleResult.classList.remove('hidden');
+        }
 
         cancelBtn.addEventListener('click', function () {
           if (!busy) return;
@@ -749,7 +1299,12 @@
           try { if (ffmpeg) ffmpeg.terminate(); } catch (e) {}
           loaded = false;
           busy = false;
+          segState = null;
+          segmenting = false;
+          cleanupParts();
           plan = null;
+          probedInfo = null;
+          modePicker.classList.add('hidden');
           progressPanel.classList.add('hidden');
           probeBtn.classList.remove('hidden');
           probeBtn.disabled = false;
@@ -764,27 +1319,47 @@
 
         function cleanupResult(keepNew) {
           if (resultURL && !keepNew) { URL.revokeObjectURL(resultURL); resultURL = null; }
-          if (!keepNew) { resultBlob = null; preview.removeAttribute('src'); }
+          if (!keepNew) { resultBlob = null; preview.removeAttribute('src'); previewError.classList.add('hidden'); }
+        }
+
+        preview.addEventListener('error', function () {
+          if (preview.getAttribute('src')) previewError.classList.remove('hidden');
+        });
+        preview.addEventListener('loadedmetadata', function () {
+          previewError.classList.add('hidden');
+        });
+
+        // Primary save path: build the File inside the click gesture and
+        // hand it to the share sheet (in-app browsers often ignore
+        // <a download>). Falls back to the download link when file sharing
+        // is not supported.
+        function shareBlobFile(blob, name, fallbackAnchor) {
+          if (!blob) return;
+          var file = null;
+          try { file = new File([blob], name, { type: 'video/mp4' }); } catch (e) { file = null; }
+          if (file && navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+            navigator.share({ files: [file], title: name }).catch(function (err) {
+              if (err && err.name !== 'AbortError') {
+                showError('共有に失敗しました。「ダウンロード」ボタンから保存を試してください。\n' + (err && err.message ? err.message : err));
+              }
+            });
+          } else if (fallbackAnchor) {
+            fallbackAnchor.click();
+          }
         }
 
         shareBtn.addEventListener('click', function () {
-          var f = shareBtn._file;
-          if (f && navigator.share) {
-            navigator.share({ files: [f] }).catch(function (err) {
-              if (err && err.name !== 'AbortError') {
-                // fallback to download
-                downloadBtn.click();
-              }
-            });
-          } else {
-            downloadBtn.click();
-          }
+          shareBlobFile(resultBlob, outputName, downloadBtn);
         });
 
         function resetAll() {
           cleanupResult(false);
+          cleanupParts();
+          $('rowLarge').classList.add('hidden');
           currentFile = null;
           plan = null;
+          probedInfo = null;
+          modePicker.classList.add('hidden');
           infoPanel.classList.add('hidden');
           resultPanel.classList.add('hidden');
           progressPanel.classList.add('hidden');
